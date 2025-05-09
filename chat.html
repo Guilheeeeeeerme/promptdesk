@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Support Assistant - Chat</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50">
+  <div class="min-h-screen flex flex-col">
+    <!-- Navbar -->
+    <nav class="bg-white shadow-sm sticky top-0 z-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex">
+            <div class="flex-shrink-0 flex items-center">
+              <h1 class="text-xl font-bold text-indigo-600">AI Support Assistant</h1>
+            </div>
+            <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <a href="chat.html" class="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                Chat
+              </a>
+              <a href="history.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                History
+              </a>
+              <a href="companies.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                Companies
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="mb-8 flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">Support Chat</h1>
+          <p class="mt-1 text-sm text-gray-600">Get AI-powered responses based on company guidelines</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Company selection sidebar -->
+        <div class="lg:col-span-3">
+          <div class="bg-white shadow rounded-lg p-4">
+            <h2 class="font-medium text-gray-900 mb-4">Select Company</h2>
+            <div class="space-y-2">
+              <select class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 bg-white text-gray-900 py-2">
+                <option value="">Select a company</option>
+                <option value="1">Bookshop</option>
+                <option value="2">VPN SaaS</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat container -->
+        <div class="lg:col-span-9">
+          <div class="bg-white shadow rounded-lg flex flex-col h-[600px]">
+            <!-- Chat header -->
+            <div class="px-4 py-3 border-b border-gray-200">
+              <div class="flex items-center">
+                <div class="bg-indigo-100 rounded-full h-10 w-10 flex items-center justify-center">
+                  <i class="fas fa-building text-indigo-600"></i>
+                </div>
+                <div class="ml-3">
+                  <p class="text-sm font-medium text-gray-900">VPN SaaS</p>
+                  <p class="text-xs text-gray-500">Connected</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat messages -->
+            <div class="flex-1 p-4 overflow-y-auto" id="chat-messages">
+              <div class="flex flex-col space-y-4">
+                <div class="flex items-end">
+                  <div class="flex flex-col space-y-2 text-xs max-w-xs mx-2 order-2 items-start">
+                    <div>
+                      <span class="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-600">
+                        Hi, I'm trying to connect to the VPN but I keep getting a "Connection Failed" error. What should I do?
+                      </span>
+                    </div>
+                  </div>
+                  <div class="w-8 h-8 rounded-full bg-indigo-200 flex items-center justify-center order-1 text-indigo-600">
+                    <i class="fas fa-user"></i>
+                  </div>
+                </div>
+                
+                <div class="flex items-end justify-end">
+                  <div class="flex flex-col space-y-2 text-xs max-w-xs mx-2 order-1 items-end">
+                    <div>
+                      <span class="px-4 py-2 rounded-lg inline-block rounded-br-none bg-indigo-500 text-white">
+                        I'll help you troubleshoot the VPN connection issue. Let's go through some common solutions:
+                        <br><br>
+                        1. Check if your internet connection is stable<br>
+                        2. Verify that you're using the latest version of our VPN client<br>
+                        3. Make sure your subscription is active<br>
+                        4. Try switching to a different server location<br>
+                        <br>
+                        Could you tell me which version of the VPN client you're using?
+                      </span>
+                    </div>
+                  </div>
+                  <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center order-2 text-white">
+                    <i class="fas fa-robot"></i>
+                  </div>
+                </div>
+
+                <div class="flex items-end">
+                  <div class="flex flex-col space-y-2 text-xs max-w-xs mx-2 order-2 items-start">
+                    <div>
+                      <span class="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-600">
+                        I'm using version 2.1.3. I just checked and there's a new version 2.2.0 available. Should I update?
+                      </span>
+                    </div>
+                  </div>
+                  <div class="w-8 h-8 rounded-full bg-indigo-200 flex items-center justify-center order-1 text-indigo-600">
+                    <i class="fas fa-user"></i>
+                  </div>
+                </div>
+
+                <div class="flex items-end justify-end">
+                  <div class="flex flex-col space-y-2 text-xs max-w-xs mx-2 order-1 items-end">
+                    <div>
+                      <span class="px-4 py-2 rounded-lg inline-block rounded-br-none bg-indigo-500 text-white">
+                        Yes, I recommend updating to version 2.2.0. This version includes important bug fixes and connection stability improvements. Here's how to update:
+                        <br><br>
+                        1. Open the VPN client<br>
+                        2. Go to Settings > About<br>
+                        3. Click "Check for Updates"<br>
+                        4. Follow the update prompts<br>
+                        <br>
+                        After updating, try connecting again. Let me know if you still experience any issues.
+                      </span>
+                    </div>
+                  </div>
+                  <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center order-2 text-white">
+                    <i class="fas fa-robot"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat input -->
+            <div class="border-t border-gray-200 px-4 py-3">
+              <form class="flex items-center">
+                <input type="text" placeholder="Type your message..." class="rounded-md border-gray-300 flex-1 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 bg-white text-gray-900 py-2 px-3">
+                <button type="submit" class="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150 ease-in-out">
+                  <i class="fas fa-paper-plane mr-2"></i>
+                  Send
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
