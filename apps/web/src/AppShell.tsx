@@ -5,7 +5,7 @@ import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
 
 const navItems = [
-  { to: '/', label: 'Session', exact: true },
+  { to: '/', label: 'Home', exact: true },
   { to: '/history', label: 'History' },
   { to: '/companies', label: 'Companies' },
 ];
