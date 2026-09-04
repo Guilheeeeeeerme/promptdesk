@@ -3,6 +3,7 @@ import {
   Controller,
   DefaultValuePipe,
   Get,
+  Headers,
   Param,
   ParseIntPipe,
   Post,
@@ -32,8 +33,14 @@ export class ChatController {
   create(
     @Req() req: AuthenticatedRequest,
     @Body() body: CreateChatDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.chatService.createUserMessage(req.session, body.message);
+    return this.chatService.createUserMessage(
+      req.session,
+      body,
+      // Body key wins over the header fallback.
+      body.idempotencyKey || idempotencyKey,
+    );
   }
 
   @Post('messages/:id/retry')

@@ -1,4 +1,10 @@
-import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateConversationDto {
   @IsOptional()
@@ -30,4 +36,10 @@ export class CreateChatDto {
   @IsOptional()
   @IsString()
   conversationId?: string;
+
+  /** Optional idempotent-send key (or `Idempotency-Key` header); max 64 chars. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  idempotencyKey?: string;
 }

@@ -234,7 +234,10 @@ export function ChatPage() {
       try {
         const result = await apiFetch<ChatResponse>('/chat', {
           method: 'POST',
-          body: JSON.stringify({ message: content }),
+          body: JSON.stringify({
+            message: content,
+            idempotencyKey: crypto.randomUUID(),
+          }),
         });
         setMessages((prev) =>
           prev.map((m) => {
