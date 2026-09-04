@@ -1,24 +1,58 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
+import {
+  appendTokenToReturnUrl,
+  getToken,
+  isAllowedReturnUrl,
+} from '@shared/auth';
+import { getAllowedReturnOrigins } from './api';
 import { useAuth } from './auth';
 
 export function LoginPage() {
   const { session, loading, login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl');
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('Password123!');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const allowedOrigins = getAllowedReturnOrigins();
+  const validReturnUrl =
+    returnUrl && isAllowedReturnUrl(returnUrl, allowedOrigins)
+      ? returnUrl
+      : null;
+
   if (!loading && session) {
+    const token = getToken();
+    if (validReturnUrl && token) {
+      window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
+          Returning to application…
+        </div>
+      );
+    }
     return <Navigate to="/" replace />;
   }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+
+    if (returnUrl && !validReturnUrl) {
+      setError('Invalid return URL for SSO');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await login(email, password);
+      const token = getToken();
+      if (validReturnUrl && token) {
+        window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
+        return;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -33,7 +67,9 @@ export function LoginPage() {
           AI Support Assistant
         </h1>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Sign in to continue
+          {validReturnUrl
+            ? 'Sign in to continue to the Support app'
+            : 'Sign in to continue'}
         </p>
       </div>
 

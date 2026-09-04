@@ -14,20 +14,40 @@ enum Role {
   agent
 }
 
+enum MessageRole {
+  user
+  assistant
+}
+
 model Company {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
+  id        String        @id @default(cuid())
+  name      String        @unique
+  createdAt DateTime      @default(now())
   users     User[]
+  messages  ChatMessage[]
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String        @id @default(cuid())
+  email        String        @unique
   passwordHash String
   name         String
   role         Role
   companyId    String?
-  company      Company? @relation(fields: [companyId], references: [id])
-  createdAt    DateTime @default(now())
+  company      Company?      @relation(fields: [companyId], references: [id])
+  createdAt    DateTime      @default(now())
+  messages     ChatMessage[]
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  companyId String
+  company   Company     @relation(fields: [companyId], references: [id])
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  role      MessageRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  @@index([companyId, createdAt])
 }

@@ -1,14 +1,22 @@
 import { useState, type ChangeEvent } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { getToken } from './api';
+import { appendTokenToReturnUrl } from '@shared/auth';
+import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
 
 const navItems = [
   { to: '/', label: 'Session', exact: true },
-  { to: '/chat', label: 'Chat' },
   { to: '/history', label: 'History' },
   { to: '/companies', label: 'Companies' },
 ];
+
+function supportHref(): string {
+  const token = getToken();
+  const base = SUPPORT_ORIGIN.endsWith('/')
+    ? SUPPORT_ORIGIN
+    : `${SUPPORT_ORIGIN}/`;
+  return token ? appendTokenToReturnUrl(base, token) : base;
+}
 
 export function AppShell() {
   const { session, loading, logout, companies, canSwitchCompany, switchCompany } =
@@ -58,10 +66,9 @@ export function AppShell() {
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 {navItems.map((item) => {
-                  const active =
-                    item.exact
-                      ? location.pathname === item.to
-                      : location.pathname.startsWith(item.to);
+                  const active = item.exact
+                    ? location.pathname === item.to
+                    : location.pathname.startsWith(item.to);
                   return (
                     <Link
                       key={item.to}
@@ -76,6 +83,20 @@ export function AppShell() {
                     </Link>
                   );
                 })}
+                <a
+                  href={supportHref()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    // Always hand the current Main token so Support shares the
+                    // same Redis session (including latest activeCompanyId).
+                    e.preventDefault();
+                    window.open(supportHref(), '_blank', 'noopener,noreferrer');
+                  }}
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                >
+                  Chat
+                </a>
               </div>
             </div>
             <div className="flex items-center gap-4">

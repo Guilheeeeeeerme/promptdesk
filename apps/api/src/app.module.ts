@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
+import { ChatModule } from './chat/chat.module';
 import { CompaniesModule } from './companies/companies.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -12,6 +13,7 @@ import { RedisModule } from './redis/redis.module';
     RedisModule,
     AuthModule,
     CompaniesModule,
+    ChatModule,
   ],
 })
 export class AppModule {}
