@@ -10,4 +10,12 @@ export interface Company {
   id: string;
   name: string;
   createdAt?: string;
+  guidelineFileName?: string | null;
+  guidelineUpdatedAt?: string | null;
+  hasGuidelines?: boolean;
+  messageCount?: number;
+}
+
+export interface CompanyDetail extends Company {
+  guidelineText?: string | null;
 }
