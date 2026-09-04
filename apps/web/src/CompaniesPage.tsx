@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
-import type { Company, CompanyDetail } from './types';
+import type { Company, CompanyDetail, GuidelineVersionMeta } from './types';
 import { isPlatformRole } from './types';
 
 function formatDate(value: string | null | undefined): string {
@@ -35,6 +35,9 @@ export function CompaniesPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<CompanyDetail | null>(null);
+  const [viewingVersions, setViewingVersions] = useState<
+    GuidelineVersionMeta[] | null
+  >(null);
   const [viewLoading, setViewLoading] = useState(false);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -66,8 +69,14 @@ export function CompaniesPage() {
     setViewLoading(true);
     setError(null);
     try {
-      const detail = await apiFetch<CompanyDetail>(`/companies/${companyId}`);
+      const [detail, versions] = await Promise.all([
+        apiFetch<CompanyDetail>(`/companies/${companyId}`),
+        apiFetch<GuidelineVersionMeta[]>(
+          `/companies/${companyId}/guidelines/versions`,
+        ),
+      ]);
       setViewing(detail);
+      setViewingVersions(versions);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load guidelines');
     } finally {
@@ -262,8 +271,12 @@ export function CompaniesPage() {
                           aria-hidden="true"
                         />
                         <p>
-                          Guidelines last updated on{' '}
-                          <time dateTime={company.guidelineUpdatedAt ?? undefined}>
+                          {company.currentVersion
+                            ? `Version ${company.currentVersion} · updated on `
+                            : 'Guidelines last updated on '}
+                          <time
+                            dateTime={company.guidelineUpdatedAt ?? undefined}
+                          >
                             {formatDate(company.guidelineUpdatedAt)}
                           </time>
                         </p>
@@ -304,6 +317,7 @@ export function CompaniesPage() {
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
                   {viewing.guidelineFileName ?? 'No file uploaded'}
+                  {viewing.currentVersion ? ` · version ${viewing.currentVersion}` : ''}
                   {viewing.guidelineUpdatedAt
                     ? ` · updated ${formatDate(viewing.guidelineUpdatedAt)}`
                     : ''}
@@ -311,12 +325,36 @@ export function CompaniesPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setViewing(null)}
+                onClick={() => {
+                  setViewing(null);
+                  setViewingVersions(null);
+                }}
                 className="text-gray-400 hover:text-gray-600 text-sm font-medium"
               >
                 Close
               </button>
             </div>
+            {viewingVersions && viewingVersions.length > 0 && (
+              <ul className="px-4 py-3 border-b border-gray-100 space-y-1 text-sm text-gray-500">
+                {viewingVersions.map((v) => (
+                  <li key={v.id} className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-gray-700">
+                      v{v.version}
+                    </span>
+                    <span className="truncate">
+                      {v.fileName ?? 'guidelines.txt'}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <time
+                      dateTime={v.createdAt}
+                      className="flex-shrink-0 whitespace-nowrap"
+                    >
+                      {formatDate(v.createdAt)}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            )}
             <pre className="px-4 py-4 overflow-auto text-sm text-gray-800 whitespace-pre-wrap flex-1">
               {viewing.guidelineText?.trim()
                 ? viewing.guidelineText

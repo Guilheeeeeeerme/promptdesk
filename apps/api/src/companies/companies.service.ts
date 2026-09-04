@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -16,9 +17,34 @@ export type CompanyListItem = {
   createdAt: Date;
   guidelineFileName: string | null;
   guidelineUpdatedAt: Date | null;
+  currentVersion: number | null;
   hasGuidelines: boolean;
   messageCount: number;
 };
+
+export type GuidelineVersionMeta = {
+  id: string;
+  version: number;
+  fileName: string | null;
+  contentHash: string;
+  byteSize: number | null;
+  createdAt: Date;
+};
+
+export type GuidelineVersionDetail = GuidelineVersionMeta & {
+  content: string;
+};
+
+function hashGuidelineContent(content: string): {
+  contentHash: string;
+  byteSize: number;
+} {
+  const buffer = Buffer.from(content, 'utf8');
+  return {
+    contentHash: createHash('sha256').update(buffer).digest('hex'),
+    byteSize: buffer.byteLength,
+  };
+}
 
 @Injectable()
 export class CompaniesService {
@@ -63,6 +89,7 @@ export class CompaniesService {
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
+        currentGuidelineVersion: { select: { version: true } },
       },
     });
 
@@ -76,6 +103,7 @@ export class CompaniesService {
       createdAt: company.createdAt,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
+      currentVersion: company.currentGuidelineVersion?.version ?? null,
       hasGuidelines: Boolean(company.guidelineText),
       messageCount: counts.get(company.id) ?? 0,
     }));
@@ -93,6 +121,7 @@ export class CompaniesService {
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
+        currentGuidelineVersion: { select: { version: true } },
       },
     });
 
@@ -106,6 +135,7 @@ export class CompaniesService {
       createdAt: company.createdAt,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
+      currentVersion: company.currentGuidelineVersion?.version ?? null,
       hasGuidelines: Boolean(company.guidelineText),
       guidelineText: company.guidelineText,
       messageCount: await this.messageCountFor(company.id),
@@ -156,6 +186,7 @@ export class CompaniesService {
         createdAt: company.createdAt,
         guidelineFileName: company.guidelineFileName,
         guidelineUpdatedAt: company.guidelineUpdatedAt,
+        currentVersion: null,
         hasGuidelines: Boolean(company.guidelineText),
         messageCount: 0,
       };
@@ -180,21 +211,42 @@ export class CompaniesService {
     await this.assertCanManage(session, companyId);
     const guideline = this.parseGuidelineFile(file);
 
-    const company = await this.prisma.company.update({
-      where: { id: companyId },
-      data: {
-        guidelineText: guideline.text,
-        guidelineFileName: guideline.fileName,
-        guidelineUpdatedAt: new Date(),
-      },
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        guidelineFileName: true,
-        guidelineUpdatedAt: true,
-        guidelineText: true,
-      },
+    const company = await this.prisma.$transaction(async (tx) => {
+      const last = await tx.guidelineVersion.findFirst({
+        where: { companyId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+
+      const version = await tx.guidelineVersion.create({
+        data: {
+          companyId,
+          version: (last?.version ?? 0) + 1,
+          content: guideline.text,
+          fileName: guideline.fileName,
+          ...hashGuidelineContent(guideline.text),
+          createdById: session.userId,
+        },
+      });
+
+      return tx.company.update({
+        where: { id: companyId },
+        data: {
+          guidelineText: guideline.text,
+          guidelineFileName: guideline.fileName,
+          guidelineUpdatedAt: new Date(),
+          currentGuidelineVersionId: version.id,
+        },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          guidelineFileName: true,
+          guidelineUpdatedAt: true,
+          guidelineText: true,
+          currentGuidelineVersion: { select: { version: true } },
+        },
+      });
     });
 
     return {
@@ -203,6 +255,7 @@ export class CompaniesService {
       createdAt: company.createdAt,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
+      currentVersion: company.currentGuidelineVersion?.version ?? null,
       hasGuidelines: Boolean(company.guidelineText),
       messageCount: await this.messageCountFor(company.id),
     };
@@ -211,12 +264,15 @@ export class CompaniesService {
   async deleteGuidelines(session: SessionData, companyId: string) {
     await this.assertCanManage(session, companyId);
 
+    // Clears the current guideline; immutable version history is retained
+    // (there is intentionally no endpoint to delete versions).
     const company = await this.prisma.company.update({
       where: { id: companyId },
       data: {
         guidelineText: null,
         guidelineFileName: null,
         guidelineUpdatedAt: null,
+        currentGuidelineVersionId: null,
       },
       select: {
         id: true,
@@ -234,9 +290,57 @@ export class CompaniesService {
       createdAt: company.createdAt,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
+      currentVersion: null,
       hasGuidelines: false,
       messageCount: await this.messageCountFor(company.id),
     };
+  }
+
+  async listGuidelineVersions(
+    session: SessionData,
+    companyId: string,
+  ): Promise<GuidelineVersionMeta[]> {
+    await this.assertCanAccess(session, companyId);
+
+    return this.prisma.guidelineVersion.findMany({
+      where: { companyId },
+      orderBy: { version: 'desc' },
+      select: {
+        id: true,
+        version: true,
+        fileName: true,
+        contentHash: true,
+        byteSize: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async getGuidelineVersion(
+    session: SessionData,
+    companyId: string,
+    versionId: string,
+  ): Promise<GuidelineVersionDetail> {
+    await this.assertCanAccess(session, companyId);
+
+    const version = await this.prisma.guidelineVersion.findFirst({
+      where: { id: versionId, companyId },
+      select: {
+        id: true,
+        version: true,
+        fileName: true,
+        contentHash: true,
+        byteSize: true,
+        createdAt: true,
+        content: true,
+      },
+    });
+
+    if (!version) {
+      throw new NotFoundException('Guideline version not found');
+    }
+
+    return version;
   }
 
   private parseGuidelineFile(file: Express.Multer.File): {

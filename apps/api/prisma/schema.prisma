@@ -21,13 +21,36 @@ enum Role {
 }
 
 model Company {
-  id                 String   @id @default(cuid())
-  name               String   @unique
-  createdAt          DateTime @default(now())
-  guidelineText      String?
-  guidelineFileName  String?
-  guidelineUpdatedAt DateTime?
-  users              User[]
+  id                        String             @id @default(cuid())
+  name                      String             @unique
+  createdAt                 DateTime           @default(now())
+  guidelineText             String?
+  guidelineFileName         String?
+  guidelineUpdatedAt        DateTime?
+  users                     User[]
+  // Denormalized pointer to the current immutable guideline version.
+  currentGuidelineVersionId String?            @unique
+  currentGuidelineVersion   GuidelineVersion?  @relation("CompanyCurrentGuidelineVersion", fields: [currentGuidelineVersionId], references: [id])
+  versions                  GuidelineVersion[] @relation("CompanyGuidelineVersions")
+}
+
+// Immutable snapshot of a company guideline upload. History is never deleted.
+model GuidelineVersion {
+  id             String   @id @default(cuid())
+  companyId      String
+  company        Company  @relation("CompanyGuidelineVersions", fields: [companyId], references: [id])
+  currentCompany Company? @relation("CompanyCurrentGuidelineVersion")
+  version        Int
+  content        String
+  fileName       String?
+  contentHash    String
+  byteSize       Int?
+  // Soft reference to the uploading user (no relation; may dangle after user removal).
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@unique([companyId, version])
+  @@index([companyId, createdAt])
 }
 
 model User {

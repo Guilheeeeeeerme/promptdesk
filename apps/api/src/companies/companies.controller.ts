@@ -62,6 +62,23 @@ export class CompaniesController {
     return this.companies.uploadGuidelines(req.session, id, file);
   }
 
+  @Get(':id/guidelines/versions')
+  listGuidelineVersions(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.companies.listGuidelineVersions(req.session, id);
+  }
+
+  @Get(':id/guidelines/versions/:versionId')
+  getGuidelineVersion(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+  ) {
+    return this.companies.getGuidelineVersion(req.session, id, versionId);
+  }
+
   @Delete(':id/guidelines')
   deleteGuidelines(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.companies.deleteGuidelines(req.session, id);
