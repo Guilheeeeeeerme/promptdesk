@@ -1,0 +1,32 @@
+export const es = {
+  'common.loading': 'Cargando…',
+  'common.appName': 'Asistente de Soporte IA',
+  'common.logOut': 'Cerrar sesión',
+  'common.language': 'Idioma',
+  'chat.nav': 'Chat',
+  'chat.mainApp': 'App principal',
+  'chat.title': 'Chat de soporte',
+  'chat.subtitle':
+    'Recomienda respuestas usando las directrices de tu empresa',
+  'chat.activeCompany': 'Empresa activa',
+  'chat.noCompany': 'Sin empresa',
+  'chat.getStarted': 'Escribe un mensaje de cliente para empezar.',
+  'chat.ai': 'IA',
+  'chat.generating': 'Generando respuesta…',
+  'chat.queued': 'En cola…',
+  'chat.stopping': 'Deteniendo…',
+  'chat.stop': 'Detener',
+  'chat.generationFailed': 'Error al generar',
+  'chat.retry': 'Reintentar',
+  'chat.stopped': 'Detenido',
+  'chat.sendFailed': 'Error al enviar',
+  'chat.stopFailed': 'Error al detener',
+  'chat.retryFailed': 'Error al reintentar',
+  'chat.sendToCancel':
+    'Envía para cancelar la respuesta actual y preguntar de nuevo',
+  'chat.placeholder':
+    'Mensaje del cliente (Shift+Enter para nueva línea)',
+  'chat.sending': 'Enviando…',
+  'chat.sendTakeOver': 'Enviar (tomar el control)',
+  'chat.send': 'Enviar',
+};

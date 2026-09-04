@@ -7,6 +7,7 @@ import {
 import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionData, isPlatformRole } from '../auth/session.types';
+import { SUPPORTED_LANGUAGES } from './dto/company-language';
 
 const MAX_GUIDELINE_BYTES = 10 * 1024 * 1024; // 10MB, matches boilerplate
 
@@ -14,6 +15,7 @@ export type CompanyListItem = {
   id: string;
   name: string;
   createdAt: Date;
+  defaultLanguage: string;
   guidelineFileName: string | null;
   guidelineUpdatedAt: Date | null;
   hasGuidelines: boolean;
@@ -60,6 +62,7 @@ export class CompaniesService {
         id: true,
         name: true,
         createdAt: true,
+        defaultLanguage: true,
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
@@ -74,6 +77,7 @@ export class CompaniesService {
       id: company.id,
       name: company.name,
       createdAt: company.createdAt,
+      defaultLanguage: company.defaultLanguage,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: Boolean(company.guidelineText),
@@ -90,6 +94,7 @@ export class CompaniesService {
         id: true,
         name: true,
         createdAt: true,
+        defaultLanguage: true,
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
@@ -104,6 +109,7 @@ export class CompaniesService {
       id: company.id,
       name: company.name,
       createdAt: company.createdAt,
+      defaultLanguage: company.defaultLanguage,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: Boolean(company.guidelineText),
@@ -116,6 +122,7 @@ export class CompaniesService {
     session: SessionData,
     name: string,
     file?: Express.Multer.File,
+    defaultLanguage?: string,
   ) {
     if (!isPlatformRole(session.role)) {
       throw new ForbiddenException('Only root and admin can create companies');
@@ -126,12 +133,14 @@ export class CompaniesService {
       throw new BadRequestException('Company name is required');
     }
 
+    const language = this.parseDefaultLanguage(defaultLanguage);
     const guideline = file ? this.parseGuidelineFile(file) : null;
 
     try {
       const company = await this.prisma.company.create({
         data: {
           name: trimmed,
+          ...(language ? { defaultLanguage: language } : {}),
           ...(guideline
             ? {
                 guidelineText: guideline.text,
@@ -144,6 +153,7 @@ export class CompaniesService {
           id: true,
           name: true,
           createdAt: true,
+          defaultLanguage: true,
           guidelineFileName: true,
           guidelineUpdatedAt: true,
           guidelineText: true,
@@ -154,6 +164,7 @@ export class CompaniesService {
         id: company.id,
         name: company.name,
         createdAt: company.createdAt,
+        defaultLanguage: company.defaultLanguage,
         guidelineFileName: company.guidelineFileName,
         guidelineUpdatedAt: company.guidelineUpdatedAt,
         hasGuidelines: Boolean(company.guidelineText),
@@ -170,6 +181,44 @@ export class CompaniesService {
       }
       throw error;
     }
+  }
+
+  async update(
+    session: SessionData,
+    companyId: string,
+    defaultLanguage?: string,
+  ) {
+    await this.assertCanManage(session, companyId);
+
+    const language = this.parseDefaultLanguage(defaultLanguage);
+    if (!language) {
+      throw new BadRequestException('defaultLanguage is required');
+    }
+
+    const company = await this.prisma.company.update({
+      where: { id: companyId },
+      data: { defaultLanguage: language },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        defaultLanguage: true,
+        guidelineFileName: true,
+        guidelineUpdatedAt: true,
+        guidelineText: true,
+      },
+    });
+
+    return {
+      id: company.id,
+      name: company.name,
+      createdAt: company.createdAt,
+      defaultLanguage: company.defaultLanguage,
+      guidelineFileName: company.guidelineFileName,
+      guidelineUpdatedAt: company.guidelineUpdatedAt,
+      hasGuidelines: Boolean(company.guidelineText),
+      messageCount: await this.messageCountFor(company.id),
+    };
   }
 
   async uploadGuidelines(
@@ -191,6 +240,7 @@ export class CompaniesService {
         id: true,
         name: true,
         createdAt: true,
+        defaultLanguage: true,
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
@@ -201,6 +251,7 @@ export class CompaniesService {
       id: company.id,
       name: company.name,
       createdAt: company.createdAt,
+      defaultLanguage: company.defaultLanguage,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: Boolean(company.guidelineText),
@@ -222,6 +273,7 @@ export class CompaniesService {
         id: true,
         name: true,
         createdAt: true,
+        defaultLanguage: true,
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
@@ -232,11 +284,24 @@ export class CompaniesService {
       id: company.id,
       name: company.name,
       createdAt: company.createdAt,
+      defaultLanguage: company.defaultLanguage,
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: false,
       messageCount: await this.messageCountFor(company.id),
     };
+  }
+
+  private parseDefaultLanguage(value?: string): string | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (!(SUPPORTED_LANGUAGES as readonly string[]).includes(value)) {
+      throw new BadRequestException(
+        `defaultLanguage must be one of: ${SUPPORTED_LANGUAGES.join(', ')}`,
+      );
+    }
+    return value;
   }
 
   private parseGuidelineFile(file: Express.Multer.File): {

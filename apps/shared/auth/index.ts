@@ -83,7 +83,11 @@ export interface SessionUser {
 
 export interface SessionPayload {
   user: SessionUser;
-  activeCompany: { id: string; name: string } | null;
+  activeCompany: {
+    id: string;
+    name: string;
+    defaultLanguage?: string;
+  } | null;
 }
 
 export interface LoginResponse extends SessionPayload {

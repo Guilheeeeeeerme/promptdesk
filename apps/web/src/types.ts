@@ -10,6 +10,7 @@ export interface Company {
   id: string;
   name: string;
   createdAt?: string;
+  defaultLanguage?: string;
   guidelineFileName?: string | null;
   guidelineUpdatedAt?: string | null;
   hasGuidelines?: boolean;

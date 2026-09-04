@@ -3,11 +3,14 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { appendTokenToReturnUrl } from '@shared/auth';
 import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
+import { LanguageSelect } from './i18n/LanguageSelect';
+import { useI18n } from './i18n';
+import { nextThemePreference, useTheme } from './theme';
 
 const navItems = [
-  { to: '/', label: 'Home', exact: true },
-  { to: '/history', label: 'History' },
-  { to: '/companies', label: 'Companies' },
+  { to: '/', labelKey: 'nav.home', exact: true },
+  { to: '/history', labelKey: 'nav.history' },
+  { to: '/companies', labelKey: 'nav.companies' },
 ];
 
 function supportHref(): string {
@@ -21,14 +24,16 @@ function supportHref(): string {
 export function AppShell() {
   const { session, loading, logout, companies, canSwitchCompany, switchCompany } =
     useAuth();
+  const { preference, setPreference } = useTheme();
+  const { t } = useI18n();
   const location = useLocation();
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-        Loading session…
+      <div className="min-h-screen bg-bg flex items-center justify-center text-muted-strong">
+        {t('common.loading')}
       </div>
     );
   }
@@ -47,24 +52,26 @@ export function AppShell() {
     try {
       await switchCompany(companyId);
     } catch (err) {
-      setSwitchError(err instanceof Error ? err.message : 'Switch failed');
+      setSwitchError(
+        err instanceof Error ? err.message : t('shell.switchFailed'),
+      );
     } finally {
       setSwitching(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <nav className="bg-white shadow-sm sticky top-0 z-10">
+    <div className="min-h-screen flex flex-col bg-bg">
+      <nav className="bg-surface shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-indigo-600">
-                  AI Support Assistant
+                <h1 className="text-xl font-bold text-primary">
+                  {t('common.appName')}
                 </h1>
               </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <div className="hidden sm:ms-6 sm:flex sm:space-x-8">
                 {navItems.map((item) => {
                   const active = item.exact
                     ? location.pathname === item.to
@@ -75,11 +82,11 @@ export function AppShell() {
                       to={item.to}
                       className={
                         active
-                          ? 'border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
-                          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+                          ? 'border-primary text-text inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+                          : 'border-transparent text-muted hover:border-border-strong hover:text-muted-strong inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
                       }
                     >
-                      {item.label}
+                      {t(item.labelKey)}
                     </Link>
                   );
                 })}
@@ -88,14 +95,12 @@ export function AppShell() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => {
-                    // Always hand the current Main token so Support shares the
-                    // same Redis session (including latest activeCompanyId).
                     e.preventDefault();
                     window.open(supportHref(), '_blank', 'noopener,noreferrer');
                   }}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-transparent text-muted hover:border-border-strong hover:text-muted-strong inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
-                  Chat
+                  {t('nav.chat')}
                 </a>
               </div>
             </div>
@@ -104,16 +109,16 @@ export function AppShell() {
                 <div className="flex items-center gap-2">
                   <label
                     htmlFor="company-switcher"
-                    className="text-sm text-gray-500 hidden md:inline"
+                    className="text-sm text-muted hidden md:inline"
                   >
-                    Company
+                    {t('shell.company')}
                   </label>
                   <select
                     id="company-switcher"
                     disabled={switching}
                     value={session.activeCompany?.id ?? ''}
                     onChange={onCompanyChange}
-                    className="rounded-md border-gray-300 shadow-sm text-sm py-1.5 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+                    className="rounded-md border-border-strong shadow-sm text-sm py-1.5 bg-surface text-text focus:border-primary focus:ring-primary"
                   >
                     {companies.map((company) => (
                       <option key={company.id} value={company.id}>
@@ -123,15 +128,28 @@ export function AppShell() {
                   </select>
                 </div>
               )}
-              <span className="text-sm text-gray-600 hidden lg:inline">
+              <LanguageSelect />
+              <span className="text-sm text-muted-strong hidden lg:inline">
                 {session.user.name} ({session.user.role})
               </span>
               <button
                 type="button"
-                onClick={() => void logout()}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                onClick={() => setPreference(nextThemePreference(preference))}
+                aria-label="Toggle color theme"
+                className="text-sm font-medium text-muted hover:text-text"
               >
-                Log out
+                {preference === 'system'
+                  ? 'System'
+                  : preference === 'dark'
+                    ? 'Dark'
+                    : 'Light'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="text-sm font-medium text-primary hover:text-primary-hover"
+              >
+                {t('common.logOut')}
               </button>
             </div>
           </div>

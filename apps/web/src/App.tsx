@@ -4,6 +4,8 @@ import { AddCompanyPage } from './AddCompanyPage';
 import { AppShell } from './AppShell';
 import { CompaniesPage } from './CompaniesPage';
 import { SUPPORT_ORIGIN } from './api';
+import { useAuth } from './auth';
+import { I18nProvider, useI18n } from './i18n';
 import { LoginPage } from './LoginPage';
 import { PlaceholderPage } from './PlaceholderPage';
 import { SessionHome } from './SessionHome';
@@ -21,7 +23,9 @@ function ChatRedirect() {
   return <Navigate to="/" replace />;
 }
 
-export default function App() {
+function AppRoutes() {
+  const { t } = useI18n();
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
@@ -33,8 +37,8 @@ export default function App() {
           path="/history"
           element={
             <PlaceholderPage
-              title="Chat History"
-              description="Browse previous support interactions"
+              title={t('history.title')}
+              description={t('history.description')}
             />
           }
         />
@@ -43,5 +47,15 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+export default function App() {
+  const { session } = useAuth();
+
+  return (
+    <I18nProvider companyDefault={session?.activeCompany?.defaultLanguage}>
+      <AppRoutes />
+    </I18nProvider>
   );
 }
