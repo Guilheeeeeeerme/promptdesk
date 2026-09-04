@@ -1,0 +1,293 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { ConversationStatus } from '@prisma/chat-client';
+import type { ChatMessage, Conversation } from '@prisma/chat-client';
+import { SessionData } from '../auth/session.types';
+import { ChatPrismaService } from '../prisma/chat-prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
+import type {
+  CreateConversationDto,
+  UpdateConversationDto,
+} from './dto/create-chat.dto';
+
+export const FINAL_CONVERSATION_STATUSES: ConversationStatus[] = [
+  ConversationStatus.solved,
+  ConversationStatus.not_solved,
+];
+
+export function isConversationFinal(status: ConversationStatus): boolean {
+  return FINAL_CONVERSATION_STATUSES.includes(status);
+}
+
+export const CONVERSATION_SOLVED_CONFLICT =
+  'Conversation is solved; reopen to continue';
+
+/** Query params arrive as strings; normalized here. */
+export interface ListConversationsFilters {
+  status?: string;
+  pinned?: string;
+  archived?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Sticky guidance binding result. guidelineVersionId holds a sha256 content
+ * token (same scheme as GuidelineVersion.contentHash in the guideline-versions
+ * sibling) — swapping to real version ids later is a small diff in bindGuideline.
+ */
+interface BoundGuideline {
+  guidelineVersionId: string | null;
+  guidelineSnapshot: string | null;
+  guidelineSnapshotHash: string | null;
+  guidelineBoundAt: Date | null;
+}
+
+@Injectable()
+export class ConversationsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly chatPrisma: ChatPrismaService,
+  ) {}
+
+  private serializeConversation(conversation: Conversation) {
+    return {
+      id: conversation.id,
+      companyId: conversation.companyId,
+      userId: conversation.userId,
+      customerId: conversation.customerId,
+      title: conversation.title,
+      pinned: conversation.pinned,
+      archived: conversation.archived,
+      status: conversation.status,
+      rating: conversation.rating,
+      guidelineVersionId: conversation.guidelineVersionId,
+      guidelineSnapshotHash: conversation.guidelineSnapshotHash,
+      guidelineBoundAt: conversation.guidelineBoundAt,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+      lastMessageAt: conversation.lastMessageAt,
+    };
+  }
+
+  private serializeMessage(message: ChatMessage) {
+    return {
+      id: message.id,
+      content: message.content,
+      role: message.role,
+      status: message.status,
+      parentMessageId: message.parentMessageId,
+      attemptCount: message.attemptCount,
+      lastError: message.lastError,
+      model: message.model,
+      provider: message.provider ?? null,
+      conversationId: message.conversationId,
+      createdAt: message.createdAt,
+    };
+  }
+
+  private assertActiveCompany(session: SessionData): string {
+    if (!session.activeCompanyId) {
+      throw new BadRequestException('No active company in session');
+    }
+    return session.activeCompanyId;
+  }
+
+  /**
+   * Ownership gate: conversation must belong to the session's active company
+   * AND the session user (user isolation on top of tenant isolation), and must
+   * not be soft-deleted. Cross-company / cross-user / deleted → 404.
+   * Shared with ChatService for stop/retry/message ownership checks.
+   */
+  async getOwnedConversation(
+    session: SessionData,
+    conversationId: string,
+  ): Promise<Conversation> {
+    const companyId = this.assertActiveCompany(session);
+
+    const conversation = await this.chatPrisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (
+      !conversation ||
+      conversation.companyId !== companyId ||
+      conversation.userId !== session.userId ||
+      conversation.deletedAt
+    ) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    return conversation;
+  }
+
+  /** getOwnedConversation + blocks messaging when the status is final. */
+  async getWritableConversation(
+    session: SessionData,
+    conversationId: string,
+  ): Promise<Conversation> {
+    const conversation = await this.getOwnedConversation(session, conversationId);
+
+    if (isConversationFinal(conversation.status)) {
+      throw new ConflictException(CONVERSATION_SOLVED_CONFLICT);
+    }
+
+    return conversation;
+  }
+
+  /**
+   * Sticky guidance binding: read the core company guideline ONCE at
+   * conversation start and freeze it (snapshot + sha256). Subsequent jobs never
+   * re-read live guidelines; guideline replace/clear does not affect this chat.
+   */
+  private async bindGuideline(companyId: string): Promise<BoundGuideline> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { guidelineText: true },
+    });
+
+    const text = company?.guidelineText;
+    if (!text) {
+      return {
+        guidelineVersionId: null,
+        guidelineSnapshot: null,
+        guidelineSnapshotHash: null,
+        guidelineBoundAt: null,
+      };
+    }
+
+    const hash = createHash('sha256').update(text).digest('hex');
+    return {
+      guidelineVersionId: hash,
+      guidelineSnapshot: text,
+      guidelineSnapshotHash: hash,
+      guidelineBoundAt: new Date(),
+    };
+  }
+
+  async list(session: SessionData, filters: ListConversationsFilters) {
+    const companyId = this.assertActiveCompany(session);
+
+    if (
+      filters.status !== undefined &&
+      filters.status !== '' &&
+      !Object.values(ConversationStatus).includes(
+        filters.status as ConversationStatus,
+      )
+    ) {
+      throw new BadRequestException('Invalid status filter');
+    }
+
+    const pinned =
+      filters.pinned === undefined || filters.pinned === ''
+        ? undefined
+        : filters.pinned === 'true';
+    const archived =
+      filters.archived === undefined || filters.archived === ''
+        ? undefined
+        : filters.archived === 'true';
+
+    const limit = Math.min(Math.max(filters.limit ?? 50, 1), 100);
+    const offset = Math.max(filters.offset ?? 0, 0);
+
+    const conversations = await this.chatPrisma.conversation.findMany({
+      where: {
+        companyId,
+        userId: session.userId,
+        deletedAt: null,
+        ...(filters.status !== undefined && filters.status !== ''
+          ? { status: filters.status as ConversationStatus }
+          : {}),
+        ...(pinned === undefined ? {} : { pinned }),
+        ...(archived === undefined ? {} : { archived }),
+        ...(filters.q
+          ? { title: { contains: filters.q, mode: 'insensitive' as const } }
+          : {}),
+      },
+      orderBy: [
+        { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
+      take: limit,
+      skip: offset,
+    });
+
+    return conversations.map((c) => this.serializeConversation(c));
+  }
+
+  async detail(session: SessionData, conversationId: string) {
+    const conversation = await this.getOwnedConversation(session, conversationId);
+    return this.serializeConversation(conversation);
+  }
+
+  async listMessages(session: SessionData, conversationId: string) {
+    await this.getOwnedConversation(session, conversationId);
+
+    const messages = await this.chatPrisma.chatMessage.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return messages.map((m) => this.serializeMessage(m));
+  }
+
+  async create(session: SessionData, dto: CreateConversationDto) {
+    const companyId = this.assertActiveCompany(session);
+
+    const binding = await this.bindGuideline(companyId);
+
+    const conversation = await this.chatPrisma.conversation.create({
+      data: {
+        companyId,
+        userId: session.userId,
+        title: dto.title ?? null,
+        ...binding,
+      },
+    });
+
+    return this.serializeConversation(conversation);
+  }
+
+  async update(
+    session: SessionData,
+    conversationId: string,
+    dto: UpdateConversationDto,
+  ) {
+    const conversation = await this.getOwnedConversation(session, conversationId);
+
+    if (dto.title !== undefined && dto.title.trim().length === 0) {
+      throw new BadRequestException('Title cannot be empty');
+    }
+
+    // PATCH stays allowed in final status — that is how reopen works.
+    const updated = await this.chatPrisma.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        title: dto.title,
+        pinned: dto.pinned,
+        archived: dto.archived,
+        status: dto.status as ConversationStatus | undefined,
+        rating: dto.rating,
+      },
+    });
+
+    return this.serializeConversation(updated);
+  }
+
+  async softDelete(session: SessionData, conversationId: string) {
+    const conversation = await this.getOwnedConversation(session, conversationId);
+
+    const updated = await this.chatPrisma.conversation.update({
+      where: { id: conversation.id },
+      data: { deletedAt: new Date() },
+    });
+
+    return this.serializeConversation(updated);
+  }
+}

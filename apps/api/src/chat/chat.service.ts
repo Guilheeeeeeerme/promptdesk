@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -13,6 +14,11 @@ import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import {
+  CONVERSATION_SOLVED_CONFLICT,
+  ConversationsService,
+  isConversationFinal,
+} from './conversations.service';
+import {
   CHAT_ABORT_TTL_SECONDS,
   CHAT_EVENTS_CHANNEL,
   CHAT_GENERATE_QUEUE,
@@ -20,6 +26,7 @@ import {
   type ChatGenerateJobData,
   type ChatJobEvent,
 } from './chat.constants';
+import type { CreateChatDto } from './dto/create-chat.dto';
 
 const IN_FLIGHT: MessageStatus[] = [
   MessageStatus.pending,
@@ -35,6 +42,7 @@ export class ChatService {
     private readonly chatPrisma: ChatPrismaService,
     private readonly config: ConfigService,
     private readonly redis: RedisService,
+    private readonly conversations: ConversationsService,
     @InjectQueue(CHAT_GENERATE_QUEUE)
     private readonly chatQueue: Queue<ChatGenerateJobData>,
   ) {
@@ -51,6 +59,7 @@ export class ChatService {
     lastError: string | null;
     model: string | null;
     provider?: string | null;
+    conversationId?: string | null;
     createdAt: Date;
     companyId: string;
   }) {
@@ -64,6 +73,7 @@ export class ChatService {
       lastError: message.lastError,
       model: message.model,
       provider: message.provider ?? null,
+      conversationId: message.conversationId ?? null,
       createdAt: message.createdAt,
       companyId: message.companyId,
     };
@@ -182,7 +192,27 @@ export class ChatService {
     return messages.map((m) => this.serializeMessage(m));
   }
 
-  async createUserMessage(session: SessionData, content: string) {
+  /**
+   * Resolves the target conversation for POST /chat: verifies the supplied id
+   * belongs to session company+user (404 otherwise) and is not in a final
+   * status (409), or auto-creates a fresh conversation with sticky guidance.
+   */
+  private async resolveConversationForMessage(
+    session: SessionData,
+    conversationId?: string,
+  ): Promise<{ id: string }> {
+    if (conversationId) {
+      const conversation = await this.conversations.getWritableConversation(
+        session,
+        conversationId,
+      );
+      return { id: conversation.id };
+    }
+
+    return this.conversations.create(session, {});
+  }
+
+  async createUserMessage(session: SessionData, dto: CreateChatDto) {
     if (!session.activeCompanyId) {
       throw new BadRequestException('No active company in session');
     }
@@ -196,16 +226,23 @@ export class ChatService {
 
     const companyId = session.activeCompanyId;
 
+    const conversation = await this.resolveConversationForMessage(
+      session,
+      dto.conversationId,
+    );
+
     // Takeover: cancel any in-flight assistant generations for this stream.
     await this.cancelInFlightForUser(session.userId, companyId);
 
+    const now = new Date();
     const result = await this.chatPrisma.$transaction(async (tx) => {
       const userMessage = await tx.chatMessage.create({
         data: {
           companyId,
           userId: session.userId,
+          conversationId: conversation.id,
           role: MessageRole.user,
-          content,
+          content: dto.message,
           status: MessageStatus.completed,
         },
       });
@@ -214,12 +251,18 @@ export class ChatService {
         data: {
           companyId,
           userId: session.userId,
+          conversationId: conversation.id,
           role: MessageRole.assistant,
           content: '',
           status: MessageStatus.pending,
           parentMessageId: userMessage.id,
           provider: 'gemini',
         },
+      });
+
+      await tx.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: now },
       });
 
       return { userMessage, assistantMessage };
@@ -230,6 +273,7 @@ export class ChatService {
       userMessageId: result.userMessage.id,
       companyId,
       userId: session.userId,
+      conversationId: conversation.id,
       provider: 'gemini',
     });
 
@@ -238,6 +282,7 @@ export class ChatService {
       message: this.serializeMessage(result.userMessage),
       assistantMessage: this.serializeMessage(result.assistantMessage),
       reply: null,
+      conversationId: conversation.id,
     };
   }
 
@@ -260,6 +305,14 @@ export class ChatService {
 
     if (message.userId !== session.userId) {
       throw new NotFoundException('Message not found');
+    }
+
+    if (message.conversationId) {
+      // Message lives in a conversation: it must belong to session company+user.
+      await this.conversations.getOwnedConversation(
+        session,
+        message.conversationId,
+      );
     }
 
     if (message.role !== MessageRole.assistant) {
@@ -322,6 +375,18 @@ export class ChatService {
       throw new NotFoundException('Message not found');
     }
 
+    if (message.conversationId) {
+      // Message lives in a conversation: it must belong to session company+user
+      // and must not be in a final status (reopen first).
+      const conversation = await this.conversations.getOwnedConversation(
+        session,
+        message.conversationId,
+      );
+      if (isConversationFinal(conversation.status)) {
+        throw new ConflictException(CONVERSATION_SOLVED_CONFLICT);
+      }
+    }
+
     if (message.role !== MessageRole.assistant) {
       throw new BadRequestException('Only assistant messages can be retried');
     }
@@ -353,6 +418,7 @@ export class ChatService {
       userMessageId: message.parentMessageId,
       companyId: message.companyId,
       userId: session.userId,
+      conversationId: message.conversationId ?? undefined,
       provider: 'gemini',
     });
 

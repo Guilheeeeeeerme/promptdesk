@@ -10,6 +10,40 @@ type MessageStatus =
   | 'failed'
   | 'cancelled';
 
+type ConversationStatus =
+  | 'open'
+  | 'in_progress'
+  | 'solved'
+  | 'not_solved';
+
+const CONVERSATION_STATUSES: ConversationStatus[] = [
+  'open',
+  'in_progress',
+  'solved',
+  'not_solved',
+];
+
+/** solved / not_solved are final: view-only transcript until reopened. */
+const FINAL_STATUSES: ConversationStatus[] = ['solved', 'not_solved'];
+
+function isConversationFinal(status: ConversationStatus): boolean {
+  return FINAL_STATUSES.includes(status);
+}
+
+const STATUS_LABELS: Record<ConversationStatus, string> = {
+  open: 'Open',
+  in_progress: 'In progress',
+  solved: 'Solved',
+  not_solved: 'Not solved',
+};
+
+const STATUS_BADGES: Record<ConversationStatus, string> = {
+  open: 'bg-gray-100 text-gray-700',
+  in_progress: 'bg-blue-100 text-blue-700',
+  solved: 'bg-emerald-100 text-emerald-700',
+  not_solved: 'bg-rose-100 text-rose-700',
+};
+
 interface ChatBubble {
   id: string;
   role: 'user' | 'assistant';
@@ -28,6 +62,19 @@ interface ChatMessageDto {
   attemptCount: number;
   lastError: string | null;
   model: string | null;
+  conversationId: string | null;
+  createdAt: string;
+}
+
+interface ConversationDto {
+  id: string;
+  title: string | null;
+  pinned: boolean;
+  archived: boolean;
+  status: ConversationStatus;
+  rating: number | null;
+  guidelineSnapshotHash: string | null;
+  lastMessageAt: string | null;
   createdAt: string;
 }
 
@@ -36,6 +83,7 @@ interface ChatResponse {
   reply: null;
   message: ChatMessageDto;
   assistantMessage: ChatMessageDto;
+  conversationId: string;
 }
 
 interface RetryResponse {
@@ -70,16 +118,43 @@ function isTerminalJobStatus(status: MessageStatus): boolean {
   );
 }
 
+function toBubble(m: ChatMessageDto): ChatBubble {
+  return {
+    id: m.id,
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content,
+    status: m.status,
+    lastError: m.lastError,
+    parentMessageId: m.parentMessageId,
+  };
+}
+
+function formatWhen(value: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString();
+}
+
 export function ChatPage() {
   const { session, loading, logout } = useAuth();
+  const [conversations, setConversations] = useState<ConversationDto[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatBubble[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
+
+  const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
+  const viewOnly =
+    activeConversation !== null && isConversationFinal(activeConversation.status);
 
   const disconnectSocketIfIdle = useCallback(() => {
     if (pendingIdsRef.current.size > 0) return;
@@ -155,22 +230,49 @@ export function ChatPage() {
     };
   }, []);
 
+  // Search is debounced so typing does not spam the API.
   useEffect(() => {
+    const id = window.setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  const loadConversations = useCallback(async () => {
     if (!session) return;
+    const params = new URLSearchParams();
+    if (statusFilter) params.set('status', statusFilter);
+    if (pinnedOnly) params.set('pinned', 'true');
+    params.set('archived', showArchived ? 'true' : 'false');
+    if (search) params.set('q', search);
+    const qs = params.toString();
+    const list = await apiFetch<ConversationDto[]>(
+      `/chat/conversations${qs ? `?${qs}` : ''}`,
+    );
+    // Server orders by lastMessageAt; pinned float to the top client-side.
+    setConversations(
+      [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned)),
+    );
+  }, [session, statusFilter, pinnedOnly, showArchived, search]);
+
+  useEffect(() => {
+    void loadConversations().catch(() => {
+      // Sidebar is optional; the composer still works without it.
+    });
+  }, [loadConversations, session?.activeCompany?.id]);
+
+  useEffect(() => {
+    if (!session || !activeId) {
+      setMessages([]);
+      return;
+    }
 
     let cancelled = false;
     void (async () => {
       try {
-        const history = await apiFetch<ChatMessageDto[]>('/chat/messages?limit=50');
+        const history = await apiFetch<ChatMessageDto[]>(
+          `/chat/conversations/${activeId}/messages`,
+        );
         if (cancelled) return;
-        const bubbles: ChatBubble[] = history.map((m) => ({
-          id: m.id,
-          role: m.role === 'assistant' ? 'assistant' : 'user',
-          content: m.content,
-          status: m.status,
-          lastError: m.lastError,
-          parentMessageId: m.parentMessageId,
-        }));
+        const bubbles = history.map(toBubble);
         setMessages(bubbles);
 
         const pending = bubbles.filter(
@@ -183,24 +285,60 @@ export function ChatPage() {
           ensureSocket();
         }
       } catch {
-        // History is optional; chat still works without hydrate
+        if (!cancelled) {
+          setMessages([]);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [session?.user.id, session?.activeCompany?.id, ensureSocket]);
+  }, [session, activeId, ensureSocket]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const patchConversation = useCallback(
+    async (id: string, patch: Record<string, unknown>) => {
+      setError(null);
+      try {
+        await apiFetch<ConversationDto>(`/chat/conversations/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        });
+        await loadConversations();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Update failed');
+      }
+    },
+    [loadConversations],
+  );
+
+  const onDelete = useCallback(
+    async (id: string) => {
+      setError(null);
+      if (!window.confirm('Delete this conversation?')) return;
+      try {
+        await apiFetch(`/chat/conversations/${id}`, { method: 'DELETE' });
+        if (id === activeId) {
+          setActiveId(null);
+          setMessages([]);
+        }
+        await loadConversations();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Delete failed');
+      }
+    },
+    [activeId, loadConversations],
+  );
+
   const onSend = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
       const content = input.trim();
-      if (!content || sending) return;
+      if (!content || sending || viewOnly) return;
 
       setError(null);
       setSending(true);
@@ -234,7 +372,10 @@ export function ChatPage() {
       try {
         const result = await apiFetch<ChatResponse>('/chat', {
           method: 'POST',
-          body: JSON.stringify({ message: content }),
+          body: JSON.stringify({
+            message: content,
+            ...(activeId ? { conversationId: activeId } : {}),
+          }),
         });
         setMessages((prev) =>
           prev.map((m) => {
@@ -257,6 +398,12 @@ export function ChatPage() {
           }),
         );
         trackPending(result.assistantMessage.id);
+
+        if (result.conversationId !== activeId) {
+          // Fresh conversation was created server-side; select it.
+          setActiveId(result.conversationId);
+        }
+        void loadConversations().catch(() => undefined);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Send failed');
         setMessages((prev) =>
@@ -266,7 +413,7 @@ export function ChatPage() {
         setSending(false);
       }
     },
-    [input, sending, trackPending],
+    [input, sending, viewOnly, activeId, trackPending, loadConversations],
   );
 
   const onStop = useCallback(
@@ -405,129 +552,345 @@ export function ChatPage() {
           </p>
         </div>
 
-        <div className="bg-white shadow rounded-lg flex flex-col h-[600px]">
-          <div className="px-4 py-3 border-b border-gray-200">
-            <div className="flex items-center">
-              <div className="bg-indigo-100 rounded-full h-10 w-10 flex items-center justify-center text-indigo-600 font-semibold">
-                {companyName.slice(0, 1).toUpperCase()}
+        <div className="flex gap-4 h-[640px]">
+          <aside className="w-72 shrink-0 bg-white shadow rounded-lg flex flex-col">
+            <div className="px-3 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveId(null);
+                  setMessages([]);
+                  setError(null);
+                }}
+                className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                New chat
+              </button>
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search chats…"
+                className="mt-3 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
+                >
+                  <option value="">All statuses</option>
+                  {CONVERSATION_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">{companyName}</p>
-                <p className="text-xs text-gray-500">Active company</p>
+              <div className="mt-2 flex items-center gap-4 pb-2 text-xs text-gray-600">
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={pinnedOnly}
+                    onChange={(e) => setPinnedOnly(e.target.checked)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  Pinned
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  Archived
+                </label>
               </div>
             </div>
-          </div>
 
-          <div className="flex-1 p-4 overflow-y-auto">
-            <div className="flex flex-col space-y-4">
-              {messages.length === 0 && (
-                <p className="text-sm text-gray-500 text-center py-8">
-                  Enter a customer message to get started.
+            <div className="flex-1 overflow-y-auto border-t border-gray-200">
+              {conversations.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-6 px-3">
+                  No conversations yet.
                 </p>
               )}
-              {messages.map((msg) => {
-                const isAssistant = msg.role === 'assistant';
-                const label = isAssistant
-                  ? 'AI'
-                  : session.user.name.slice(0, 1).toUpperCase();
-
-                return (
-                  <div key={msg.id} className="flex items-end">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${
-                        isAssistant
-                          ? 'bg-emerald-200 text-emerald-800'
-                          : 'bg-indigo-200 text-indigo-700'
+              <ul className="divide-y divide-gray-100">
+                {conversations.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveId(c.id);
+                        setError(null);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${
+                        c.id === activeId ? 'bg-indigo-50' : ''
                       }`}
                     >
-                      {label}
-                    </div>
-                    <div className="flex flex-col space-y-2 text-sm max-w-xl mx-2 items-start">
-                      {isInFlight(msg.status) ? (
-                        <div className="space-y-2">
-                          <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
-                            {msg.status === 'processing'
-                              ? 'Generating reply…'
-                              : 'Queued…'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => void onStop(msg.id)}
-                            disabled={stoppingIds.has(msg.id)}
-                            className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-60"
-                          >
-                            {stoppingIds.has(msg.id) ? 'Stopping…' : 'Stop'}
-                          </button>
-                        </div>
-                      ) : msg.status === 'failed' ? (
-                        <div className="space-y-2">
-                          <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700">
-                            {msg.lastError || 'Generation failed'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => void onRetry(msg.id)}
-                            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      ) : msg.status === 'cancelled' ? (
-                        <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-50 text-gray-400 italic">
-                          Stopped
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-gray-900 truncate">
+                          {c.title || 'Untitled chat'}
                         </span>
-                      ) : (
+                        {c.pinned && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-600 shrink-0">
+                            Pinned
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-2">
                         <span
-                          className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap ${
-                            isAssistant
-                              ? 'bg-emerald-50 text-gray-800'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_BADGES[c.status]}`}
                         >
-                          {msg.content}
+                          {STATUS_LABELS[c.status]}
                         </span>
-                      )}
-                    </div>
+                        <span className="text-[10px] text-gray-400 truncate">
+                          {formatWhen(c.lastMessageAt ?? c.createdAt)}
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+
+          <div className="flex-1 bg-white shadow rounded-lg flex flex-col min-w-0">
+            <div className="px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center min-w-0">
+                  <div className="bg-indigo-100 rounded-full h-10 w-10 flex items-center justify-center text-indigo-600 font-semibold shrink-0">
+                    {companyName.slice(0, 1).toUpperCase()}
                   </div>
-                );
-              })}
-              <div ref={bottomRef} />
+                  <div className="ml-3 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {activeConversation?.title || 'New chat'}
+                    </p>
+                    <p className="text-xs text-gray-500">{companyName}</p>
+                  </div>
+                </div>
+                {activeConversation && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <select
+                      value={activeConversation.status}
+                      onChange={(e) =>
+                        void patchConversation(activeConversation.id, {
+                          status: e.target.value,
+                        })
+                      }
+                      className="rounded-md border border-gray-300 px-2 py-1 text-xs bg-white focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                      {CONVERSATION_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void patchConversation(activeConversation.id, {
+                          pinned: !activeConversation.pinned,
+                        })
+                      }
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      {activeConversation.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void patchConversation(activeConversation.id, {
+                          archived: !activeConversation.archived,
+                        })
+                      }
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      {activeConversation.archived ? 'Unarchive' : 'Archive'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDelete(activeConversation.id)}
+                      className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+              {activeConversation && (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        title={`Rate ${star} star${star > 1 ? 's' : ''}${
+                          activeConversation.rating === star ? ' (clear)' : ''
+                        }`}
+                        onClick={() =>
+                          void patchConversation(activeConversation.id, {
+                            rating:
+                              activeConversation.rating === star ? null : star,
+                          })
+                        }
+                        className={`text-lg leading-none ${
+                          (activeConversation.rating ?? 0) >= star
+                            ? 'text-yellow-500'
+                            : 'text-gray-300 hover:text-yellow-400'
+                        }`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[10px] text-gray-400 truncate">
+                    {activeConversation.guidelineSnapshotHash
+                      ? `Guidance bound: ${activeConversation.guidelineSnapshotHash.slice(0, 12)}…`
+                      : 'No guidance bound'}
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
 
-          {error && (
-            <div className="px-4 py-2 text-sm text-red-600 border-t border-red-50 bg-red-50">
-              {error}
+            <div className="flex-1 p-4 overflow-y-auto">
+              <div className="flex flex-col space-y-4">
+                {messages.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-8">
+                    {activeId
+                      ? 'No messages in this conversation yet.'
+                      : 'Enter a customer message to get started.'}
+                  </p>
+                )}
+                {messages.map((msg) => {
+                  const isAssistant = msg.role === 'assistant';
+                  const label = isAssistant
+                    ? 'AI'
+                    : session.user.name.slice(0, 1).toUpperCase();
+
+                  return (
+                    <div key={msg.id} className="flex items-end">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${
+                          isAssistant
+                            ? 'bg-emerald-200 text-emerald-800'
+                            : 'bg-indigo-200 text-indigo-700'
+                        }`}
+                      >
+                        {label}
+                      </div>
+                      <div className="flex flex-col space-y-2 text-sm max-w-xl mx-2 items-start">
+                        {isInFlight(msg.status) ? (
+                          <div className="space-y-2">
+                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
+                              {msg.status === 'processing'
+                                ? 'Generating reply…'
+                                : 'Queued…'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void onStop(msg.id)}
+                              disabled={stoppingIds.has(msg.id)}
+                              className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-60"
+                            >
+                              {stoppingIds.has(msg.id) ? 'Stopping…' : 'Stop'}
+                            </button>
+                          </div>
+                        ) : msg.status === 'failed' ? (
+                          <div className="space-y-2">
+                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700">
+                              {msg.lastError || 'Generation failed'}
+                            </span>
+                            {!viewOnly && (
+                              <button
+                                type="button"
+                                onClick={() => void onRetry(msg.id)}
+                                className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                              >
+                                Retry
+                              </button>
+                            )}
+                          </div>
+                        ) : msg.status === 'cancelled' ? (
+                          <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-50 text-gray-400 italic">
+                            Stopped
+                          </span>
+                        ) : (
+                          <span
+                            className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap ${
+                              isAssistant
+                                ? 'bg-emerald-50 text-gray-800'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {msg.content}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={bottomRef} />
+              </div>
             </div>
-          )}
 
-          <div className="border-t border-gray-200 px-4 py-3">
-            <form className="flex items-end gap-3" onSubmit={onSend}>
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    e.currentTarget.form?.requestSubmit();
+            {error && (
+              <div className="px-4 py-2 text-sm text-red-600 border-t border-red-50 bg-red-50">
+                {error}
+              </div>
+            )}
+
+            {viewOnly && activeConversation && (
+              <div className="px-4 py-2 text-sm text-amber-800 bg-amber-50 border-t border-amber-100 flex items-center justify-between gap-3">
+                <span>
+                  This conversation is{' '}
+                  {STATUS_LABELS[activeConversation.status].toLowerCase()} —
+                  view-only transcript.
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void patchConversation(activeConversation.id, {
+                      status: 'open',
+                    })
                   }
-                }}
-                rows={3}
-                placeholder={
-                  hasInFlight
-                    ? 'Send to cancel current reply and ask again'
-                    : 'Customer message (Shift+Enter for new line)'
-                }
-                className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[4.5rem]"
-              />
-              <button
-                type="submit"
-                disabled={sending || !input.trim()}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
-              >
-                {sending ? 'Sending…' : hasInFlight ? 'Send (take over)' : 'Send'}
-              </button>
-            </form>
+                  className="text-xs font-semibold text-amber-900 underline hover:no-underline shrink-0"
+                >
+                  Reopen
+                </button>
+              </div>
+            )}
+
+            <div className="border-t border-gray-200 px-4 py-3">
+              <form className="flex items-end gap-3" onSubmit={onSend}>
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  rows={3}
+                  disabled={viewOnly}
+                  placeholder={
+                    viewOnly
+                      ? 'This conversation is closed — reopen to send messages'
+                      : hasInFlight
+                        ? 'Send to cancel current reply and ask again'
+                        : 'Customer message (Shift+Enter for new line)'
+                  }
+                  className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[4.5rem] disabled:bg-gray-100 disabled:text-gray-400"
+                />
+                <button
+                  type="submit"
+                  disabled={sending || viewOnly || !input.trim()}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {sending ? 'Sending…' : hasInFlight ? 'Send (take over)' : 'Send'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </main>

@@ -5,6 +5,8 @@ import { AuthModule } from '../auth/auth.module';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
+import { ConversationsController } from './conversations.controller';
+import { ConversationsService } from './conversations.service';
 import { CHAT_GENERATE_QUEUE } from './chat.constants';
 
 @Module({
@@ -24,7 +26,7 @@ import { CHAT_GENERATE_QUEUE } from './chat.constants';
       name: CHAT_GENERATE_QUEUE,
     }),
   ],
-  controllers: [ChatController],
-  providers: [ChatService, ChatGateway],
+  controllers: [ChatController, ConversationsController],
+  providers: [ChatService, ConversationsService, ChatGateway],
 })
 export class ChatModule {}

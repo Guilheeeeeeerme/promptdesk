@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate && prisma generate --schema prisma-chat/schema.prisma",
     "prisma:migrate": "prisma migrate deploy && prisma migrate deploy --schema prisma-chat/schema.prisma",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "backfill:conversations": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/backfill-conversations.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

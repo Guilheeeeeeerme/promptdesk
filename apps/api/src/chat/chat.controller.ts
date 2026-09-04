@@ -33,7 +33,7 @@ export class ChatController {
     @Req() req: AuthenticatedRequest,
     @Body() body: CreateChatDto,
   ) {
-    return this.chatService.createUserMessage(req.session, body.message);
+    return this.chatService.createUserMessage(req.session, body);
   }
 
   @Post('messages/:id/retry')
