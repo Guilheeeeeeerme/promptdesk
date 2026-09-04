@@ -26,6 +26,16 @@ enum MessageStatus {
   cancelled
 }
 
+/// solved / not_solved are FINAL: the conversation becomes a view-only
+/// transcript and messaging is blocked (POST /chat → 409). Explicit reopen
+/// means PATCH status back to open / in_progress.
+enum ConversationStatus {
+  open
+  in_progress
+  solved
+  not_solved
+}
+
 /// Chat-scoped customer. companyId / createdById soft-ref core DB (no cross-DB FK).
 model Customer {
   id          String        @id @default(cuid())
@@ -48,6 +58,8 @@ model ChatMessage {
   userId          String
   customerId      String?
   customer        Customer?     @relation(fields: [customerId], references: [id])
+  conversation    Conversation? @relation(fields: [conversationId], references: [id])
+  conversationId  String?
   role            MessageRole
   content         String
   status          MessageStatus @default(completed)
@@ -62,4 +74,36 @@ model ChatMessage {
   @@index([companyId, createdAt])
   @@index([userId, status])
   @@index([customerId])
+  @@index([conversationId, createdAt])
+}
+
+/// companyId / userId / guidelineVersionId soft-ref core DB (no cross-DB FK).
+model Conversation {
+  id                    String             @id @default(cuid())
+  companyId             String
+  userId                String
+  customerId            String?
+  title                 String?
+  pinned                Boolean            @default(false)
+  archived              Boolean            @default(false)
+  deletedAt             DateTime?
+  status                ConversationStatus @default(open)
+  /// Stars 1..5; single scheme.
+  rating                Int?
+  /// Soft-ref core DB. Holds a sha256 content token (same scheme as the
+  /// GuidelineVersion.contentHash in the guideline-versions sibling).
+  guidelineVersionId    String?
+  /// Sticky guidance: snapshot bound once at conversation start. The worker
+  /// reads ONLY this; live guideline changes never affect in-flight chats.
+  guidelineSnapshot     String?
+  /// sha256 hex of guidelineSnapshot.
+  guidelineSnapshotHash String?
+  guidelineBoundAt      DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  lastMessageAt         DateTime?
+  messages              ChatMessage[]
+
+  @@index([companyId, userId, lastMessageAt])
+  @@index([companyId, status])
 }

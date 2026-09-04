@@ -72,6 +72,7 @@ export class ChatGenerateProcessor extends WorkerHost {
       userMessageId,
       companyId,
       userId,
+      conversationId,
       priorAttemptCount = 0,
     } = job.data;
     const provider: ChatProvider = job.data.provider ?? 'gemini';
@@ -112,24 +113,65 @@ export class ChatGenerateProcessor extends WorkerHost {
     try {
       await this.assertNotAborted(assistantMessageId);
 
-      const [company, agent, userMessage, history] = await Promise.all([
-        this.corePrisma.company.findUnique({ where: { id: companyId } }),
-        this.corePrisma.user.findUnique({ where: { id: userId } }),
-        this.prisma.chatMessage.findUnique({ where: { id: userMessageId } }),
-        this.prisma.chatMessage.findMany({
-          where: {
-            companyId,
-            userId,
-            status: MessageStatus.completed,
-            id: { not: assistantMessageId },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        }),
-      ]);
+      const [company, agent, userMessage, conversation, history] =
+        await Promise.all([
+          this.corePrisma.company.findUnique({ where: { id: companyId } }),
+          this.corePrisma.user.findUnique({ where: { id: userId } }),
+          this.prisma.chatMessage.findUnique({ where: { id: userMessageId } }),
+          conversationId
+            ? this.prisma.conversation.findUnique({
+                where: { id: conversationId },
+              })
+            : null,
+          // History is scoped to the conversation; legacy jobs fall back to
+          // orphan rows (conversationId null).
+          this.prisma.chatMessage.findMany({
+            where: {
+              companyId,
+              userId,
+              conversationId: conversationId ?? null,
+              status: MessageStatus.completed,
+              id: { not: assistantMessageId },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          }),
+        ]);
 
       if (!userMessage) {
         throw new Error('User message not found');
+      }
+
+      if (conversationId && !conversation) {
+        this.logger.warn(
+          `Refusing job ${assistantMessageId}: conversation ${conversationId} not found`,
+        );
+        throw new Error('Conversation not found');
+      }
+
+      // Defense in depth: the queued payload must match the conversation's
+      // owner. Mismatch → no LLM call, job fails.
+      if (
+        conversation &&
+        (conversation.companyId !== companyId ||
+          conversation.userId !== userId)
+      ) {
+        this.logger.warn(
+          `Refusing job ${assistantMessageId}: conversation ${conversation.id} does not match payload company/user`,
+        );
+        throw new Error('Conversation ownership mismatch');
+      }
+
+      // Sticky guidance: bound once at conversation start; the live company
+      // guideline is never re-read here. Company row is used only for name
+      // placeholders.
+      let guidelines: string | null = null;
+      if (conversation) {
+        guidelines = conversation.guidelineSnapshot ?? null;
+      } else {
+        this.logger.log(
+          `Legacy job without conversationId; generating without guideline snapshot for ${assistantMessageId}`,
+        );
       }
 
       await this.assertNotAborted(assistantMessageId);
@@ -159,7 +201,7 @@ export class ChatGenerateProcessor extends WorkerHost {
       );
 
       const genParams = {
-        guidelines: company?.guidelineText ?? null,
+        guidelines,
         history: chronological.map((m) => ({
           role: (m.role === MessageRole.user ? 'user' : 'assistant') as
             | 'user'

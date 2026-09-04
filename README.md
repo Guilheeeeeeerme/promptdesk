@@ -27,7 +27,7 @@ Browser / MFE
 NestJS API (:3000, dmz_internal)
     ├── Redis          → sessions + BullMQ + pub/sub
     ├── postgres       → users, companies, guidelines (DATABASE_URL)
-    ├── postgres-chat  → ChatMessage, Customer (CHAT_DATABASE_URL)
+    ├── postgres-chat  → Conversation, ChatMessage, Customer (CHAT_DATABASE_URL)
     └── enqueue generate job
          ▼
     chat-worker (dmz_internal) → LLM → publish status → API Socket.IO
@@ -156,17 +156,49 @@ Guidelines live in Postgres on `Company` (`guidelineText`, `guidelineFileName`, 
 
 ## Chat API
 
+All routes require `Authorization: Bearer <session-token>`. Resources are scoped to the Redis session (`activeCompanyId` + `userId`); foreign company/user/deleted ids return **404**.
+
+### Conversations
+
 | Method | Path | Notes |
 |--------|------|--------|
-| `POST` | `/chat` | Body `{ message }`; persists user + pending assistant; enqueues BullMQ job |
-| `GET` | `/chat/messages` | Recent messages for session user + active company (`?limit=50`) |
-| `POST` | `/chat/messages/:id/retry` | Re-enqueue a **failed** assistant message |
+| `GET` | `/chat/conversations` | List (`?status=&pinned=&archived=&q=&limit=50&offset=0`), newest activity first |
+| `POST` | `/chat/conversations` | Create (`{ title? }`); binds the company guideline snapshot immediately |
+| `GET` | `/chat/conversations/:id` | Detail |
+| `GET` | `/chat/conversations/:id/messages` | Full transcript (oldest first) |
+| `PATCH` | `/chat/conversations/:id` | `{ pinned?, archived?, status?, title?, rating? }` |
+| `DELETE` | `/chat/conversations/:id` | **Soft** delete (`deletedAt` set); excluded from lists, detail → 404 |
+
+Lifecycle rules:
+
+- `status` enum: `open` | `in_progress` | `solved` | `not_solved`.
+- `solved` / `not_solved` are **final**: the conversation becomes a view-only transcript — `POST /chat` and message retry are rejected with **409**. Reopen explicitly via `PATCH { "status": "open" }` (or `in_progress`).
+- `PATCH` stays available in final status (that is how reopen works). `rating` is stars `1..5` (`null` clears it); `title` caps at 200 chars.
+
+**Sticky guidance:** the guideline snapshot is bound once at conversation start (`guidelineSnapshot` + sha256 `guidelineSnapshotHash`; `guidelineVersionId` carries the same sha256 token as the `GuidelineVersion.contentHash` scheme). The worker generates replies from the snapshot only — replacing or clearing the company guideline never changes in-flight conversations.
+
+### Messaging
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `POST` | `/chat` | Body `{ message, conversationId? }`; without `conversationId` a fresh conversation (with binding) is created automatically. Persists user + pending assistant stamped onto the conversation and enqueues the BullMQ job |
+| `GET` | `/chat/messages` | Legacy global history for session user + active company (`?limit=50`) |
+| `POST` | `/chat/messages/:id/retry` | Re-enqueue a **failed** assistant message (409 while its conversation is final) |
+| `POST` | `/chat/messages/:id/stop` | Cancel a pending/processing assistant message |
 | Socket.IO | `/socket.io` | Auth via `auth.token` or `query.token`; emits `ready` / `job:update` |
 
 ### Chat reliability
 
 - **Fair-use limit:** `POST /chat` and `POST /chat/messages/:id/retry` (both trigger LLM work) are capped per user + active company with a fixed 1-minute window: `CHAT_RATE_LIMIT_PER_MINUTE` (default `20`). Exceeding it returns **429** with a friendly message; the window resets after the minute.
 - **Idempotent sends:** `POST /chat` accepts an optional `idempotencyKey` (body, max 64 chars) or `Idempotency-Key` header (body wins). Replaying the same key within **24h** returns the original stored response — no duplicate messages, no extra LLM job. A key that is still processing returns **409** ("Already sending this message"). No key → behavior unchanged. Keys are scoped to the signed-in user + active company, so they can never be replayed across users or companies.
+
+### Backfill legacy messages
+
+Groups pre-conversation `ChatMessage` rows (`conversationId` null) into one "Imported chat" conversation per (companyId, userId), with no guideline binding. Idempotent — safe to re-run; not wired into migrations:
+
+```bash
+cd apps/api && npm run backfill:conversations
+```
 
 Env (see `.env.example`): `DATABASE_URL` (core), `CHAT_DATABASE_URL` (chat), **required** `GEMINI_API_KEY`, optional `OPENAI_API_KEY` (failover only), `CHAT_JOB_ATTEMPTS` (default `3`), `CHAT_RATE_LIMIT_PER_MINUTE` (default `20`), `MODEL_RANK_REFRESH_MS` (default `21600000`, 6 hours). Redis keys: `models:rank:gemini`, `models:rank:openai`, `models:rank:updatedAt`, `chat:idem:{companyId}:{userId}:{key}`.
 
