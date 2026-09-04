@@ -119,3 +119,10 @@ apps/support/dist/
 apps/support/.env
 apps/support/.env.*
 !apps/support/.env.example
+
+# ---- Chat worker ----
+apps/chat-worker/dist/
+apps/chat-worker/.env
+apps/chat-worker/.env.*
+!apps/chat-worker/.env.example
+apps/chat-worker/*.tsbuildinfo

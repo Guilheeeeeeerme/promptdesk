@@ -1,13 +1,19 @@
 import {
-  ConnectedSocket,
-  MessageBody,
   OnGatewayConnection,
-  SubscribeMessage,
+  OnGatewayDisconnect,
+  OnGatewayInit,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
+import Redis from 'ioredis';
 import { SessionService } from '../auth/session.service';
+import { ConfigService } from '@nestjs/config';
+import {
+  CHAT_EVENTS_CHANNEL,
+  type ChatJobEvent,
+} from './chat.constants';
 
 @WebSocketGateway({
   cors: {
@@ -15,11 +21,53 @@ import { SessionService } from '../auth/session.service';
     credentials: true,
   },
 })
-export class ChatGateway implements OnGatewayConnection {
+export class ChatGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
+{
+  private readonly logger = new Logger(ChatGateway.name);
+
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly sessions: SessionService) {}
+  private subscriber: Redis | null = null;
+
+  constructor(
+    private readonly sessions: SessionService,
+    private readonly config: ConfigService,
+  ) {}
+
+  afterInit() {
+    const url = this.config.get<string>('REDIS_URL', 'redis://localhost:6379');
+    this.subscriber = new Redis(url, {
+      maxRetriesPerRequest: null,
+      lazyConnect: false,
+    });
+
+    void this.subscriber.subscribe(CHAT_EVENTS_CHANNEL, (err) => {
+      if (err) {
+        this.logger.error(`Failed to subscribe ${CHAT_EVENTS_CHANNEL}`, err);
+      }
+    });
+
+    this.subscriber.on('message', (channel, raw) => {
+      if (channel !== CHAT_EVENTS_CHANNEL) return;
+      try {
+        const event = JSON.parse(raw) as ChatJobEvent;
+        this.server
+          .to(`user:${event.userId}`)
+          .emit('job:update', event);
+      } catch (err) {
+        this.logger.warn(`Invalid chat event payload: ${String(err)}`);
+      }
+    });
+  }
+
+  async onModuleDestroy() {
+    if (this.subscriber) {
+      await this.subscriber.quit();
+      this.subscriber = null;
+    }
+  }
 
   async handleConnection(client: Socket) {
     const token =
@@ -41,29 +89,14 @@ export class ChatGateway implements OnGatewayConnection {
 
     client.data.session = session;
     client.data.token = token;
+    await client.join(`user:${session.userId}`);
     client.emit('ready', {
       status: 'ready',
       activeCompanyId: session.activeCompanyId,
-      note: 'AI replies not implemented yet',
     });
   }
 
-  @SubscribeMessage('chat')
-  handleChat(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: { message?: string },
-  ) {
-    if (!client.data.session) {
-      return { status: 'unauthorized' };
-    }
-
-    client.emit('ack', {
-      status: 'ack',
-      message: body?.message ?? null,
-      reply: null,
-      note: 'Skeleton WebSocket — no AI response yet',
-    });
-
-    return { status: 'ack' };
+  handleDisconnect(_client: Socket) {
+    // Client-driven lifecycle; rooms cleaned by Socket.IO
   }
 }

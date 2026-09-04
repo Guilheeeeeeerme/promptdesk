@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionData, isPlatformRole } from '../auth/session.types';
 
@@ -21,7 +22,31 @@ export type CompanyListItem = {
 
 @Injectable()
 export class CompaniesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly chatPrisma: ChatPrismaService,
+  ) {}
+
+  private async messageCountFor(companyId: string): Promise<number> {
+    return this.chatPrisma.chatMessage.count({ where: { companyId } });
+  }
+
+  private async messageCountsByCompany(
+    companyIds: string[],
+  ): Promise<Map<string, number>> {
+    const counts = new Map<string, number>(companyIds.map((id) => [id, 0]));
+    if (companyIds.length === 0) return counts;
+
+    const grouped = await this.chatPrisma.chatMessage.groupBy({
+      by: ['companyId'],
+      where: { companyId: { in: companyIds } },
+      _count: { _all: true },
+    });
+    for (const row of grouped) {
+      counts.set(row.companyId, row._count._all);
+    }
+    return counts;
+  }
 
   async list(session: SessionData): Promise<CompanyListItem[]> {
     const where = isPlatformRole(session.role)
@@ -38,9 +63,12 @@ export class CompaniesService {
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
-        _count: { select: { messages: true } },
       },
     });
+
+    const counts = await this.messageCountsByCompany(
+      companies.map((c) => c.id),
+    );
 
     return companies.map((company) => ({
       id: company.id,
@@ -49,7 +77,7 @@ export class CompaniesService {
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: Boolean(company.guidelineText),
-      messageCount: company._count.messages,
+      messageCount: counts.get(company.id) ?? 0,
     }));
   }
 
@@ -65,7 +93,6 @@ export class CompaniesService {
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
-        _count: { select: { messages: true } },
       },
     });
 
@@ -81,7 +108,7 @@ export class CompaniesService {
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: Boolean(company.guidelineText),
       guidelineText: company.guidelineText,
-      messageCount: company._count.messages,
+      messageCount: await this.messageCountFor(company.id),
     };
   }
 
@@ -167,7 +194,6 @@ export class CompaniesService {
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
-        _count: { select: { messages: true } },
       },
     });
 
@@ -178,7 +204,7 @@ export class CompaniesService {
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: Boolean(company.guidelineText),
-      messageCount: company._count.messages,
+      messageCount: await this.messageCountFor(company.id),
     };
   }
 
@@ -199,7 +225,6 @@ export class CompaniesService {
         guidelineFileName: true,
         guidelineUpdatedAt: true,
         guidelineText: true,
-        _count: { select: { messages: true } },
       },
     });
 
@@ -210,7 +235,7 @@ export class CompaniesService {
       guidelineFileName: company.guidelineFileName,
       guidelineUpdatedAt: company.guidelineUpdatedAt,
       hasGuidelines: false,
-      messageCount: company._count.messages,
+      messageCount: await this.messageCountFor(company.id),
     };
   }
 

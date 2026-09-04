@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/chat-client"
+}
+
+generator chatWorker {
+  provider = "prisma-client-js"
+  output   = "../../chat-worker/node_modules/@prisma/chat-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CHAT_DATABASE_URL")
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+enum MessageStatus {
+  completed
+  pending
+  processing
+  failed
+  cancelled
+}
+
+/// Chat-scoped customer. companyId / createdById soft-ref core DB (no cross-DB FK).
+model Customer {
+  id          String        @id @default(cuid())
+  companyId   String
+  displayName String
+  email       String?
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  messages    ChatMessage[]
+
+  @@index([companyId, createdById, updatedAt])
+}
+
+// Sibling hooks: `provider` present; `MessageStatus.cancelled` used by stop/abort
+// (Redis key chat:abort:{assistantMessageId}). Keep cancelled if schema moves.
+model ChatMessage {
+  id              String        @id @default(cuid())
+  companyId       String
+  userId          String
+  customerId      String?
+  customer        Customer?     @relation(fields: [customerId], references: [id])
+  role            MessageRole
+  content         String
+  status          MessageStatus @default(completed)
+  parentMessageId String?
+  attemptCount    Int           @default(0)
+  lastError       String?
+  model           String?
+  /// AI provider id (e.g. gemini | openai). Owned by provider sibling.
+  provider        String?
+  createdAt       DateTime      @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([userId, status])
+  @@index([customerId])
+}
