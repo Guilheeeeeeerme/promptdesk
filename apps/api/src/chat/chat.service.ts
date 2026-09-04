@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -22,7 +24,11 @@ import {
   CHAT_ABORT_TTL_SECONDS,
   CHAT_EVENTS_CHANNEL,
   CHAT_GENERATE_QUEUE,
+  CHAT_IDEM_PENDING,
+  CHAT_IDEM_TTL_SECONDS,
+  CHAT_RATE_LIMIT_WINDOW_SECONDS,
   chatAbortKey,
+  chatIdemKey,
   type ChatGenerateJobData,
   type ChatJobEvent,
 } from './chat.constants';
@@ -33,9 +39,15 @@ const IN_FLIGHT: MessageStatus[] = [
   MessageStatus.processing,
 ];
 
+type IdempotentClaim =
+  | { outcome: 'new'; redisKey: string | null }
+  | { outcome: 'processing' }
+  | { outcome: 'replay'; response: Record<string, unknown> };
+
 @Injectable()
 export class ChatService {
   private readonly jobAttempts: number;
+  private readonly rateLimitPerMinute: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -47,6 +59,9 @@ export class ChatService {
     private readonly chatQueue: Queue<ChatGenerateJobData>,
   ) {
     this.jobAttempts = Number(this.config.get('CHAT_JOB_ATTEMPTS', 3));
+    this.rateLimitPerMinute = Number(
+      this.config.get('CHAT_RATE_LIMIT_PER_MINUTE', 20),
+    );
   }
 
   private serializeMessage(message: {
@@ -174,6 +189,75 @@ export class ChatService {
     );
   }
 
+  /**
+   * Fixed 1-minute send window per (companyId, userId): INCR a bucket
+   * counter (TTL-scoped) and reject with 429 past the configured cap.
+   */
+  private async enforceSendRateLimit(userId: string, companyId: string) {
+    const bucket = Math.floor(
+      Date.now() / (CHAT_RATE_LIMIT_WINDOW_SECONDS * 1000),
+    );
+    const key = `chat:rate:${companyId}:${userId}:${bucket}`;
+    const count = await this.redis.getClient().incr(key);
+
+    if (count === 1) {
+      await this.redis
+        .getClient()
+        .expire(key, CHAT_RATE_LIMIT_WINDOW_SECONDS);
+    }
+
+    if (count > this.rateLimitPerMinute) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: 'Too many messages — wait a moment and try again',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  /**
+   * Claims the optional idempotency key for company+user (SET NX, 24h TTL).
+   * A fresh claim returns the Redis key to store the response under; a
+   * replay returns the stored original response; a still-processing claim
+   * is reported so the caller answers 409 instead of duplicating the send.
+   */
+  private async claimIdempotentSend(
+    companyId: string,
+    userId: string,
+    idempotencyKey?: string,
+  ): Promise<IdempotentClaim> {
+    if (!idempotencyKey) {
+      return { outcome: 'new', redisKey: null };
+    }
+
+    if (idempotencyKey.length > 64) {
+      throw new BadRequestException('Idempotency key too long');
+    }
+
+    const redisKey = chatIdemKey(companyId, userId, idempotencyKey);
+    const claimed = await this.redis
+      .getClient()
+      .set(redisKey, CHAT_IDEM_PENDING, 'EX', CHAT_IDEM_TTL_SECONDS, 'NX');
+
+    if (claimed) {
+      return { outcome: 'new', redisKey };
+    }
+
+    const stored = await this.redis.getClient().get(redisKey);
+    if (stored === null) {
+      // Expired between the failed claim and the read: treat as fresh.
+      return { outcome: 'new', redisKey };
+    }
+
+    if (stored === CHAT_IDEM_PENDING) {
+      return { outcome: 'processing' };
+    }
+
+    return { outcome: 'replay', response: JSON.parse(stored) };
+  }
+
   async listMessages(session: SessionData, limit = 50) {
     if (!session.activeCompanyId) {
       throw new BadRequestException('No active company in session');
@@ -212,7 +296,11 @@ export class ChatService {
     return this.conversations.create(session, {});
   }
 
-  async createUserMessage(session: SessionData, dto: CreateChatDto) {
+  async createUserMessage(
+    session: SessionData,
+    dto: CreateChatDto,
+    idempotencyKey?: string,
+  ) {
     if (!session.activeCompanyId) {
       throw new BadRequestException('No active company in session');
     }
@@ -226,64 +314,104 @@ export class ChatService {
 
     const companyId = session.activeCompanyId;
 
-    const conversation = await this.resolveConversationForMessage(
-      session,
-      dto.conversationId,
+    const claim = await this.claimIdempotentSend(
+      companyId,
+      session.userId,
+      idempotencyKey,
     );
 
-    // Takeover: cancel any in-flight assistant generations for this stream.
-    await this.cancelInFlightForUser(session.userId, companyId);
+    if (claim.outcome === 'processing') {
+      throw new ConflictException('Already sending this message');
+    }
 
-    const now = new Date();
-    const result = await this.chatPrisma.$transaction(async (tx) => {
-      const userMessage = await tx.chatMessage.create({
-        data: {
-          companyId,
-          userId: session.userId,
-          conversationId: conversation.id,
-          role: MessageRole.user,
-          content: dto.message,
-          status: MessageStatus.completed,
-        },
+    if (claim.outcome === 'replay') {
+      return claim.response;
+    }
+
+    try {
+      await this.enforceSendRateLimit(session.userId, companyId);
+
+      const conversation = await this.resolveConversationForMessage(
+        session,
+        dto.conversationId,
+      );
+
+      // Takeover: cancel any in-flight assistant generations for this stream.
+      await this.cancelInFlightForUser(session.userId, companyId);
+
+      const now = new Date();
+      const result = await this.chatPrisma.$transaction(async (tx) => {
+        const userMessage = await tx.chatMessage.create({
+          data: {
+            companyId,
+            userId: session.userId,
+            conversationId: conversation.id,
+            role: MessageRole.user,
+            content: dto.message,
+            status: MessageStatus.completed,
+          },
+        });
+
+        const assistantMessage = await tx.chatMessage.create({
+          data: {
+            companyId,
+            userId: session.userId,
+            conversationId: conversation.id,
+            role: MessageRole.assistant,
+            content: '',
+            status: MessageStatus.pending,
+            parentMessageId: userMessage.id,
+            provider: 'gemini',
+          },
+        });
+
+        await tx.conversation.update({
+          where: { id: conversation.id },
+          data: { lastMessageAt: now },
+        });
+
+        return { userMessage, assistantMessage };
       });
 
-      const assistantMessage = await tx.chatMessage.create({
-        data: {
-          companyId,
-          userId: session.userId,
-          conversationId: conversation.id,
-          role: MessageRole.assistant,
-          content: '',
-          status: MessageStatus.pending,
-          parentMessageId: userMessage.id,
-          provider: 'gemini',
-        },
+      await this.enqueueGenerate({
+        assistantMessageId: result.assistantMessage.id,
+        userMessageId: result.userMessage.id,
+        companyId,
+        userId: session.userId,
+        conversationId: conversation.id,
+        provider: 'gemini',
       });
 
-      await tx.conversation.update({
-        where: { id: conversation.id },
-        data: { lastMessageAt: now },
-      });
+      const response = {
+        status: 'pending' as const,
+        message: this.serializeMessage(result.userMessage),
+        assistantMessage: this.serializeMessage(result.assistantMessage),
+        reply: null,
+        conversationId: conversation.id,
+      };
 
-      return { userMessage, assistantMessage };
-    });
+      if (claim.redisKey) {
+        await this.redis
+          .getClient()
+          .set(
+            claim.redisKey,
+            JSON.stringify(response),
+            'EX',
+            CHAT_IDEM_TTL_SECONDS,
+          );
+      }
 
-    await this.enqueueGenerate({
-      assistantMessageId: result.assistantMessage.id,
-      userMessageId: result.userMessage.id,
-      companyId,
-      userId: session.userId,
-      conversationId: conversation.id,
-      provider: 'gemini',
-    });
-
-    return {
-      status: 'pending' as const,
-      message: this.serializeMessage(result.userMessage),
-      assistantMessage: this.serializeMessage(result.assistantMessage),
-      reply: null,
-      conversationId: conversation.id,
-    };
+      return response;
+    } catch (err) {
+      if (claim.redisKey) {
+        // Release the claim so a failed send can be retried with the same key.
+        await this.redis
+          .getClient()
+          .del(claim.redisKey)
+          .catch(() => undefined);
+      }
+      throw err;
+    }
   }
 
   async stopAssistantMessage(session: SessionData, assistantMessageId: string) {
@@ -358,6 +486,9 @@ export class ChatService {
     if (!session.activeCompanyId) {
       throw new BadRequestException('No active company in session');
     }
+
+    // Retries trigger LLM work too, so they share the send-rate window.
+    await this.enforceSendRateLimit(session.userId, session.activeCompanyId);
 
     const message = await this.chatPrisma.chatMessage.findUnique({
       where: { id: assistantMessageId },
