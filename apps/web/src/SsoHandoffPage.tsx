@@ -14,7 +14,7 @@ import { apiFetch, clearToken, getAllowedReturnOrigins, getToken } from './api';
 export function SsoHandoffPage() {
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
-  const [message, setMessage] = useState('Continuing to application…');
+  const [message, setMessage] = useState('Continuing…');
 
   useEffect(() => {
     const allowed = getAllowedReturnOrigins();

@@ -12,8 +12,8 @@ export function LoginPage() {
   const { session, loading, login } = useAuth();
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
-  const [email, setEmail] = useState('admin@example.com');
-  const [password, setPassword] = useState('Password123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,7 +29,7 @@ export function LoginPage() {
       window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-          Returning to application…
+          Continuing…
         </div>
       );
     }
@@ -41,7 +41,7 @@ export function LoginPage() {
     setError(null);
 
     if (returnUrl && !validReturnUrl) {
-      setError('Invalid return URL for SSO');
+      setError('Invalid return URL');
       return;
     }
 
@@ -67,9 +67,7 @@ export function LoginPage() {
           AI Support Assistant
         </h1>
         <p className="mt-2 text-center text-sm text-gray-600">
-          {validReturnUrl
-            ? 'Sign in to continue to the Support app'
-            : 'Sign in to continue'}
+          {validReturnUrl ? 'Sign in to continue' : 'Sign in to your account'}
         </p>
       </div>
 
@@ -86,6 +84,7 @@ export function LoginPage() {
               <input
                 id="email"
                 type="email"
+                autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -103,6 +102,7 @@ export function LoginPage() {
               <input
                 id="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
