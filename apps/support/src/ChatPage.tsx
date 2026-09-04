@@ -374,6 +374,7 @@ export function ChatPage() {
           method: 'POST',
           body: JSON.stringify({
             message: content,
+            idempotencyKey: crypto.randomUUID(),
             ...(activeId ? { conversationId: activeId } : {}),
           }),
         });

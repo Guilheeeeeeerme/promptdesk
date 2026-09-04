@@ -62,4 +62,10 @@ export class CreateChatDto {
   @IsOptional()
   @IsString()
   conversationId?: string;
+
+  /** Optional idempotent-send key (or `Idempotency-Key` header); max 64 chars. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  idempotencyKey?: string;
 }
