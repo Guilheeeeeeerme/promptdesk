@@ -115,3 +115,7 @@ apps/api/.claude/
 apps/api/.agents/
 apps/api/.devin/
 apps/api/.cursor/
+apps/support/dist/
+apps/support/.env
+apps/support/.env.*
+!apps/support/.env.example

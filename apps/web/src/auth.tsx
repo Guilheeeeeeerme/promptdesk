@@ -93,6 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ companyId }),
     });
     setSession({ user: data.user, activeCompany: data.activeCompany });
+    // Re-fetch from Redis so UI matches server truth (same as MFEs will see).
+    const fresh = await apiFetch<SessionPayload>('/auth/me');
+    setSession(fresh);
   }, []);
 
   const value = useMemo<AuthContextValue>(
