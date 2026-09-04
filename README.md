@@ -187,6 +187,11 @@ Lifecycle rules:
 | `POST` | `/chat/messages/:id/stop` | Cancel a pending/processing assistant message |
 | Socket.IO | `/socket.io` | Auth via `auth.token` or `query.token`; emits `ready` / `job:update` |
 
+### Chat reliability
+
+- **Fair-use limit:** `POST /chat` and `POST /chat/messages/:id/retry` (both trigger LLM work) are capped per user + active company with a fixed 1-minute window: `CHAT_RATE_LIMIT_PER_MINUTE` (default `20`). Exceeding it returns **429** with a friendly message; the window resets after the minute.
+- **Idempotent sends:** `POST /chat` accepts an optional `idempotencyKey` (body, max 64 chars) or `Idempotency-Key` header (body wins). Replaying the same key within **24h** returns the original stored response — no duplicate messages, no extra LLM job. A key that is still processing returns **409** ("Already sending this message"). No key → behavior unchanged. Keys are scoped to the signed-in user + active company, so they can never be replayed across users or companies.
+
 ### Backfill legacy messages
 
 Groups pre-conversation `ChatMessage` rows (`conversationId` null) into one "Imported chat" conversation per (companyId, userId), with no guideline binding. Idempotent — safe to re-run; not wired into migrations:
@@ -195,7 +200,7 @@ Groups pre-conversation `ChatMessage` rows (`conversationId` null) into one "Imp
 cd apps/api && npm run backfill:conversations
 ```
 
-Env (see `.env.example`): `DATABASE_URL` (core), `CHAT_DATABASE_URL` (chat), **required** `GEMINI_API_KEY`, optional `OPENAI_API_KEY` (failover only), `CHAT_JOB_ATTEMPTS` (default `3`), `MODEL_RANK_REFRESH_MS` (default `300000`). Redis keys: `models:rank:gemini`, `models:rank:openai`, `models:rank:updatedAt`.
+Env (see `.env.example`): `DATABASE_URL` (core), `CHAT_DATABASE_URL` (chat), **required** `GEMINI_API_KEY`, optional `OPENAI_API_KEY` (failover only), `CHAT_JOB_ATTEMPTS` (default `3`), `CHAT_RATE_LIMIT_PER_MINUTE` (default `20`), `MODEL_RANK_REFRESH_MS` (default `300000`). Redis keys: `models:rank:gemini`, `models:rank:openai`, `models:rank:updatedAt`, `chat:idem:{companyId}:{userId}:{key}`.
 
 ## Manual test plan
 
