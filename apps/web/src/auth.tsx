@@ -18,6 +18,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  refreshCompanies: () => Promise<void>;
   switchCompany: (companyId: string) => Promise<void>;
   canSwitchCompany: boolean;
 }
@@ -106,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       refreshSession,
+      refreshCompanies: loadCompanies,
       switchCompany,
       canSwitchCompany: Boolean(
         session && isPlatformRole(session.user.role),
@@ -118,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       refreshSession,
+      loadCompanies,
       switchCompany,
     ],
   );

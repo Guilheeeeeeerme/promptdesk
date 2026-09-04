@@ -1,23 +1,51 @@
 import { PrismaClient, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const prisma = new PrismaClient();
 
 const SEED_PASSWORD = 'Password123!';
 
+function readGuideline(fileName: string): string {
+  const filePath = path.join(__dirname, 'seed-guidelines', fileName);
+  return fs.readFileSync(filePath, 'utf8');
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
+  const bookshopGuidelines = readGuideline('bookshop.txt');
+  const vpnGuidelines = readGuideline('vpn.txt');
+  const now = new Date();
 
   const bookshop = await prisma.company.upsert({
     where: { name: 'Bookshop' },
-    update: {},
-    create: { name: 'Bookshop' },
+    update: {
+      guidelineText: bookshopGuidelines,
+      guidelineFileName: 'bookshop_support_guidelines.txt',
+      guidelineUpdatedAt: now,
+    },
+    create: {
+      name: 'Bookshop',
+      guidelineText: bookshopGuidelines,
+      guidelineFileName: 'bookshop_support_guidelines.txt',
+      guidelineUpdatedAt: now,
+    },
   });
 
   const vpn = await prisma.company.upsert({
     where: { name: 'VPN SaaS' },
-    update: {},
-    create: { name: 'VPN SaaS' },
+    update: {
+      guidelineText: vpnGuidelines,
+      guidelineFileName: 'vpn_support_guidelines.txt',
+      guidelineUpdatedAt: now,
+    },
+    create: {
+      name: 'VPN SaaS',
+      guidelineText: vpnGuidelines,
+      guidelineFileName: 'vpn_support_guidelines.txt',
+      guidelineUpdatedAt: now,
+    },
   });
 
   const users: Array<{
@@ -83,7 +111,7 @@ async function main() {
     });
   }
 
-  console.log('Seed complete: Bookshop, VPN SaaS, 6 users');
+  console.log('Seed complete: Bookshop, VPN SaaS, guidelines, 6 users');
 }
 
 main()

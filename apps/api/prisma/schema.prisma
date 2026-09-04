@@ -20,11 +20,14 @@ enum MessageRole {
 }
 
 model Company {
-  id        String        @id @default(cuid())
-  name      String        @unique
-  createdAt DateTime      @default(now())
-  users     User[]
-  messages  ChatMessage[]
+  id                 String        @id @default(cuid())
+  name               String        @unique
+  createdAt          DateTime      @default(now())
+  guidelineText      String?
+  guidelineFileName  String?
+  guidelineUpdatedAt DateTime?
+  users              User[]
+  messages           ChatMessage[]
 }
 
 model User {

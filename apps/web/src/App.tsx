@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { appendTokenToReturnUrl, getToken } from '@shared/auth';
+import { AddCompanyPage } from './AddCompanyPage';
 import { AppShell } from './AppShell';
+import { CompaniesPage } from './CompaniesPage';
 import { SUPPORT_ORIGIN } from './api';
 import { LoginPage } from './LoginPage';
 import { PlaceholderPage } from './PlaceholderPage';
@@ -36,15 +38,8 @@ export default function App() {
             />
           }
         />
-        <Route
-          path="/companies"
-          element={
-            <PlaceholderPage
-              title="Companies"
-              description="Manage companies and guideline files"
-            />
-          }
-        />
+        <Route path="/companies" element={<CompaniesPage />} />
+        <Route path="/companies/new" element={<AddCompanyPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

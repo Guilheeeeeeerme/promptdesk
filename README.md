@@ -8,7 +8,9 @@ Full-stack platform for AI-assisted customer support with a **main SSO host** an
 
 **Phase 2 (done):** Support chat MFE with SSO redirect, chat stub API + WebSocket ack (no AI replies yet).
 
-**Later:** Gemini replies, guideline uploads, History MFE, etc.
+**Phase 3 (done):** Company + guideline CRUD (Postgres text storage, upload/replace/clear, Companies UI).
+
+**Later:** Gemini replies, History MFE, etc.
 
 ## Architecture
 
@@ -102,6 +104,22 @@ Authorization: Bearer <session-token>
 | `PATCH` | `/auth/context` | `{ companyId }` — root/admin only |
 | `GET` | `/companies` | List companies |
 
+## Companies + guidelines API
+
+All routes require `Authorization: Bearer <session-token>`.
+
+Tenant access: platform (`root` / `admin`) can reach every company. `manager` / `agent` only their Redis `activeCompanyId`. Writes (create company, upload/clear guidelines) require platform or `manager` (agents are read-only).
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/companies` | List companies with guideline meta + message counts |
+| `GET` | `/companies/:id` | Detail including full `guidelineText` |
+| `POST` | `/companies` | Multipart: `name` (+ optional `file` `.txt`) — platform only |
+| `PUT` | `/companies/:id/guidelines` | Multipart field `file` (`.txt`, ≤10MB) — replace |
+| `DELETE` | `/companies/:id/guidelines` | Clear stored guidelines |
+
+Guidelines live in Postgres on `Company` (`guidelineText`, `guidelineFileName`, `guidelineUpdatedAt`).
+
 ## Chat API (skeleton — no AI yet)
 
 | Method | Path | Notes |
@@ -110,6 +128,28 @@ Authorization: Bearer <session-token>
 | Socket.IO | `/socket.io` | Auth via `auth.token` or `query.token`; emits `ready` / `ack` only |
 
 ## Manual test plan
+
+### Companies + guidelines
+
+1. Sign in as `admin@example.com` → **Companies**
+2. Open Bookshop → View shows seeded guidelines
+3. Replace with a `.txt` file → meta + timestamp update
+4. Add Company with optional guidelines file
+5. As `agent.bookshop@example.com` → can View, cannot upload/clear
+6. As `manager.bookshop@example.com` → can replace guidelines for Bookshop only
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"Password123!"}' | jq -r .token)
+
+COMPANY_ID=$(curl -s http://localhost:3000/companies \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
+
+curl -s -X PUT "http://localhost:3000/companies/$COMPANY_ID/guidelines" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@bookshop_support_guidelines.txt" | jq
+```
 
 ### Auth (main)
 
@@ -138,8 +178,8 @@ curl -s -X POST http://localhost:3000/chat \
 ## Repo layout
 
 ```
-apps/api        NestJS + Prisma + Redis + chat stub
-apps/web        Main app / SSO host
+apps/api        NestJS + Prisma + Redis + chat stub + company guidelines
+apps/web        Main app / SSO host + Companies UI
 apps/support    Support chat MFE
 apps/shared/auth  Shared token + SSO helpers
 docker-compose.yml
