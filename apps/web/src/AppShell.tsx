@@ -3,6 +3,7 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { appendTokenToReturnUrl } from '@shared/auth';
 import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
+import { nextThemePreference, useTheme } from './theme';
 
 const navItems = [
   { to: '/', label: 'Home', exact: true },
@@ -21,13 +22,14 @@ function supportHref(): string {
 export function AppShell() {
   const { session, loading, logout, companies, canSwitchCompany, switchCompany } =
     useAuth();
+  const { preference, setPreference } = useTheme();
   const location = useLocation();
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
+      <div className="min-h-screen bg-bg flex items-center justify-center text-muted-strong">
         Loading session…
       </div>
     );
@@ -54,13 +56,13 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <nav className="bg-white shadow-sm sticky top-0 z-10">
+    <div className="min-h-screen flex flex-col bg-bg">
+      <nav className="bg-surface shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-indigo-600">
+                <h1 className="text-xl font-bold text-primary">
                   AI Support Assistant
                 </h1>
               </div>
@@ -75,8 +77,8 @@ export function AppShell() {
                       to={item.to}
                       className={
                         active
-                          ? 'border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
-                          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+                          ? 'border-primary text-text inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+                          : 'border-transparent text-muted hover:border-border-strong hover:text-muted-strong inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
                       }
                     >
                       {item.label}
@@ -93,7 +95,7 @@ export function AppShell() {
                     e.preventDefault();
                     window.open(supportHref(), '_blank', 'noopener,noreferrer');
                   }}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-transparent text-muted hover:border-border-strong hover:text-muted-strong inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Chat
                 </a>
@@ -104,7 +106,7 @@ export function AppShell() {
                 <div className="flex items-center gap-2">
                   <label
                     htmlFor="company-switcher"
-                    className="text-sm text-gray-500 hidden md:inline"
+                    className="text-sm text-muted hidden md:inline"
                   >
                     Company
                   </label>
@@ -113,7 +115,7 @@ export function AppShell() {
                     disabled={switching}
                     value={session.activeCompany?.id ?? ''}
                     onChange={onCompanyChange}
-                    className="rounded-md border-gray-300 shadow-sm text-sm py-1.5 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+                    className="rounded-md border-border-strong shadow-sm text-sm py-1.5 bg-surface text-text focus:border-primary focus:ring-primary"
                   >
                     {companies.map((company) => (
                       <option key={company.id} value={company.id}>
@@ -123,13 +125,25 @@ export function AppShell() {
                   </select>
                 </div>
               )}
-              <span className="text-sm text-gray-600 hidden lg:inline">
+              <span className="text-sm text-muted-strong hidden lg:inline">
                 {session.user.name} ({session.user.role})
               </span>
               <button
                 type="button"
+                onClick={() => setPreference(nextThemePreference(preference))}
+                aria-label="Toggle color theme"
+                className="text-sm font-medium text-muted hover:text-text"
+              >
+                {preference === 'system'
+                  ? 'System'
+                  : preference === 'dark'
+                    ? 'Dark'
+                    : 'Light'}
+              </button>
+              <button
+                type="button"
                 onClick={() => void logout()}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                className="text-sm font-medium text-primary hover:text-primary-hover"
               >
                 Log out
               </button>

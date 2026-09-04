@@ -16,10 +16,22 @@ function formatDate(value: string | null | undefined): string {
 
 function accentFor(name: string): { bg: string; icon: string } {
   const palette = [
-    { bg: 'bg-indigo-100', icon: 'text-indigo-600' },
-    { bg: 'bg-purple-100', icon: 'text-purple-600' },
-    { bg: 'bg-sky-100', icon: 'text-sky-600' },
-    { bg: 'bg-emerald-100', icon: 'text-emerald-600' },
+    {
+      bg: 'bg-indigo-100 dark:bg-indigo-500/20',
+      icon: 'text-indigo-600 dark:text-indigo-300',
+    },
+    {
+      bg: 'bg-purple-100 dark:bg-purple-500/20',
+      icon: 'text-purple-600 dark:text-purple-300',
+    },
+    {
+      bg: 'bg-sky-100 dark:bg-sky-500/20',
+      icon: 'text-sky-600 dark:text-sky-300',
+    },
+    {
+      bg: 'bg-emerald-100 dark:bg-emerald-500/20',
+      icon: 'text-emerald-600 dark:text-emerald-300',
+    },
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) {
@@ -131,15 +143,15 @@ export function CompaniesPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-600">Loading companies…</p>;
+    return <p className="text-sm text-muted-strong">Loading companies…</p>;
   }
 
   return (
     <div>
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Companies</h1>
-          <p className="mt-1 text-sm text-gray-600">
+          <h1 className="text-2xl font-bold text-text">Companies</h1>
+          <p className="mt-1 text-sm text-muted-strong">
             Manage company information and guidelines
           </p>
         </div>
@@ -147,7 +159,7 @@ export function CompaniesPage() {
           <div className="mt-4 md:mt-0">
             <Link
               to="/companies/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
               <i className="fas fa-plus mr-2" aria-hidden="true" />
               Add Company
@@ -157,24 +169,24 @@ export function CompaniesPage() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3">
+        <div className="mb-4 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/60 text-red-700 dark:text-red-300 text-sm px-4 py-3">
           {error}
         </div>
       )}
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
+      <div className="bg-surface shadow overflow-hidden sm:rounded-md">
         {companies.length === 0 ? (
-          <p className="px-4 py-8 text-sm text-gray-500 text-center">
+          <p className="px-4 py-8 text-sm text-muted text-center">
             No companies available for your account.
           </p>
         ) : (
-          <ul className="divide-y divide-gray-200">
+          <ul className="divide-y divide-border">
             {companies.map((company) => {
               const accent = accentFor(company.name);
               const busy = busyId === company.id;
               return (
                 <li key={company.id}>
-                  <div className="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors duration-150">
+                  <div className="px-4 py-4 sm:px-6 hover:bg-bg transition-colors duration-150">
                     <div className="flex items-center justify-between gap-4 flex-wrap">
                       <div className="flex items-center min-w-0">
                         <div
@@ -186,10 +198,10 @@ export function CompaniesPage() {
                           />
                         </div>
                         <div className="ml-4 min-w-0">
-                          <div className="text-sm font-medium text-indigo-600 truncate">
+                          <div className="text-sm font-medium text-primary truncate">
                             {company.name}
                           </div>
-                          <div className="text-sm text-gray-500 truncate">
+                          <div className="text-sm text-muted truncate">
                             {company.guidelineFileName
                               ? company.guidelineFileName
                               : 'No guidelines uploaded'}
@@ -201,7 +213,7 @@ export function CompaniesPage() {
                           type="button"
                           disabled={viewLoading}
                           onClick={() => void openGuidelines(company.id)}
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-500/20 hover:bg-indigo-200 dark:hover:bg-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                         >
                           <i className="fas fa-eye mr-1" aria-hidden="true" />
                           View
@@ -225,7 +237,7 @@ export function CompaniesPage() {
                             />
                             <label
                               htmlFor={`guideline-upload-${company.id}`}
-                              className={`inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer ${
+                              className={`inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer ${
                                 busy ? 'opacity-60 pointer-events-none' : ''
                               }`}
                             >
@@ -242,7 +254,7 @@ export function CompaniesPage() {
                                 type="button"
                                 disabled={busy}
                                 onClick={() => void onClear(company.id)}
-                                className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-60"
+                                className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-60"
                               >
                                 <i
                                   className="fas fa-trash mr-1"
@@ -256,9 +268,9 @@ export function CompaniesPage() {
                       </div>
                     </div>
                     <div className="mt-2 sm:flex sm:justify-between">
-                      <div className="flex items-center text-sm text-gray-500">
+                      <div className="flex items-center text-sm text-muted">
                         <i
-                          className="fas fa-file-alt flex-shrink-0 mr-1.5 text-gray-400"
+                          className="fas fa-file-alt flex-shrink-0 mr-1.5 text-gray-400 dark:text-gray-500"
                           aria-hidden="true"
                         />
                         <p>
@@ -268,9 +280,9 @@ export function CompaniesPage() {
                           </time>
                         </p>
                       </div>
-                      <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
+                      <div className="mt-2 flex items-center text-sm text-muted sm:mt-0">
                         <i
-                          className="fas fa-comments flex-shrink-0 mr-1.5 text-gray-400"
+                          className="fas fa-comments flex-shrink-0 mr-1.5 text-gray-400 dark:text-gray-500"
                           aria-hidden="true"
                         />
                         <p>
@@ -293,16 +305,16 @@ export function CompaniesPage() {
           aria-modal="true"
           aria-labelledby="guidelines-title"
         >
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col">
-            <div className="px-4 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+          <div className="bg-surface rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col">
+            <div className="px-4 py-4 border-b border-border flex items-start justify-between gap-4">
               <div>
                 <h2
                   id="guidelines-title"
-                  className="text-lg font-semibold text-gray-900"
+                  className="text-lg font-semibold text-text"
                 >
                   {viewing.name} guidelines
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-muted mt-1">
                   {viewing.guidelineFileName ?? 'No file uploaded'}
                   {viewing.guidelineUpdatedAt
                     ? ` · updated ${formatDate(viewing.guidelineUpdatedAt)}`
@@ -312,12 +324,12 @@ export function CompaniesPage() {
               <button
                 type="button"
                 onClick={() => setViewing(null)}
-                className="text-gray-400 hover:text-gray-600 text-sm font-medium"
+                className="text-muted hover:text-text text-sm font-medium"
               >
                 Close
               </button>
             </div>
-            <pre className="px-4 py-4 overflow-auto text-sm text-gray-800 whitespace-pre-wrap flex-1">
+            <pre className="px-4 py-4 overflow-auto text-sm text-text whitespace-pre-wrap flex-1">
               {viewing.guidelineText?.trim()
                 ? viewing.guidelineText
                 : 'No guidelines uploaded for this company yet.'}

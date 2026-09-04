@@ -45,7 +45,7 @@ export function SsoHandoffPage() {
   }, [returnUrl]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
+    <div className="min-h-screen bg-bg flex items-center justify-center text-muted-strong">
       {message}
     </div>
   );

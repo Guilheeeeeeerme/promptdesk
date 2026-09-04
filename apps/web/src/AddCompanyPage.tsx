@@ -59,19 +59,19 @@ export function AddCompanyPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Add New Company</h1>
-        <p className="mt-1 text-sm text-gray-600">
+        <h1 className="text-2xl font-bold text-text">Add New Company</h1>
+        <p className="mt-1 text-sm text-muted-strong">
           Add a new company and upload its support guidelines
         </p>
       </div>
 
-      <div className="bg-white shadow sm:rounded-lg">
+      <div className="bg-surface shadow sm:rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           <form onSubmit={onSubmit} className="space-y-6">
             <div>
               <label
                 htmlFor="company-name"
-                className="block text-sm font-medium text-gray-700"
+                className="block text-sm font-medium text-muted-strong"
               >
                 Company Name
               </label>
@@ -83,21 +83,21 @@ export function AddCompanyPage() {
                   required
                   value={name}
                   onChange={(e) => setName(e.currentTarget.value)}
-                  className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md border px-3 py-2"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-border-strong rounded-md border px-3 py-2"
                   placeholder="Enter company name"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-muted-strong">
                 Guidelines File
               </label>
               <div
                 className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md ${
                   dragOver
-                    ? 'border-indigo-400 bg-indigo-50'
-                    : 'border-gray-300'
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border-strong'
                 }`}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -108,13 +108,13 @@ export function AddCompanyPage() {
               >
                 <div className="space-y-1 text-center">
                   <i
-                    className="fas fa-file-alt mx-auto h-12 w-12 text-gray-400 text-4xl"
+                    className="fas fa-file-alt mx-auto h-12 w-12 text-gray-400 dark:text-gray-500 text-4xl"
                     aria-hidden="true"
                   />
-                  <div className="flex text-sm text-gray-600 justify-center">
+                  <div className="flex text-sm text-muted-strong justify-center">
                     <label
                       htmlFor="file-upload"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none"
+                      className="relative cursor-pointer bg-surface rounded-md font-medium text-primary hover:text-primary-hover focus-within:outline-none"
                     >
                       <span>Upload a file</span>
                       <input
@@ -130,9 +130,9 @@ export function AddCompanyPage() {
                     </label>
                     <p className="pl-1">or drag and drop</p>
                   </div>
-                  <p className="text-xs text-gray-500">TXT file up to 10MB</p>
+                  <p className="text-xs text-muted">TXT file up to 10MB</p>
                   {file && (
-                    <p className="text-sm text-gray-700 pt-2">
+                    <p className="text-sm text-muted-strong pt-2">
                       Selected: <span className="font-medium">{file.name}</span>
                     </p>
                   )}
@@ -141,7 +141,7 @@ export function AddCompanyPage() {
             </div>
 
             {error && (
-              <div className="rounded-md bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3">
+              <div className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/60 text-red-700 dark:text-red-300 text-sm px-4 py-3">
                 {error}
               </div>
             )}
@@ -149,14 +149,14 @@ export function AddCompanyPage() {
             <div className="flex justify-end space-x-3">
               <Link
                 to="/companies"
-                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="inline-flex justify-center py-2 px-4 border border-border-strong shadow-sm text-sm font-medium rounded-md text-muted-strong bg-surface hover:bg-bg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 Cancel
               </Link>
               <button
                 type="submit"
                 disabled={submitting || !name.trim()}
-                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60"
+                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-60"
               >
                 {submitting ? 'Saving…' : 'Add Company'}
               </button>
