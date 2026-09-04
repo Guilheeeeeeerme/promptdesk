@@ -1,0 +1,59 @@
+# ---- Dependencies ----
+node_modules/
+
+# ---- Builds ----
+dist/
+dist-ssr/
+build/
+*.local
+*.tsbuildinfo
+
+# ---- Env & secrets ----
+.env
+.env.*
+.env.*.local
+!.env.example
+*.pem
+
+# ---- Logs ----
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---- Tests / coverage ----
+coverage/
+.nyc_output/
+
+# ---- Caches ----
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.vite/
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Editors / IDEs ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ---- Local AI / agent tooling ----
+.claude/
+.agents/
+.devin/
+.cursor/
