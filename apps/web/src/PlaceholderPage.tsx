@@ -1,3 +1,5 @@
+import { useI18n } from './i18n';
+
 export function PlaceholderPage({
   title,
   description,
@@ -5,6 +7,8 @@ export function PlaceholderPage({
   title: string;
   description: string;
 }) {
+  const { t } = useI18n();
+
   return (
     <div>
       <div className="mb-8">
@@ -12,7 +16,7 @@ export function PlaceholderPage({
         <p className="mt-1 text-sm text-muted-strong">{description}</p>
       </div>
       <div className="bg-surface shadow rounded-lg p-6 text-muted-strong text-sm">
-        This section is not available yet.
+        {t('placeholder.notAvailable')}
       </div>
     </div>
   );

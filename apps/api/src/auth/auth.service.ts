@@ -95,13 +95,21 @@ export class AuthService {
       throw new UnauthorizedException('User no longer exists');
     }
 
-    let activeCompany: { id: string; name: string } | null = null;
+    let activeCompany: {
+      id: string;
+      name: string;
+      defaultLanguage: string;
+    } | null = null;
     if (session.activeCompanyId) {
       const company = await this.prisma.company.findUnique({
         where: { id: session.activeCompanyId },
       });
       if (company) {
-        activeCompany = { id: company.id, name: company.name };
+        activeCompany = {
+          id: company.id,
+          name: company.name,
+          defaultLanguage: company.defaultLanguage,
+        };
       }
     }
 

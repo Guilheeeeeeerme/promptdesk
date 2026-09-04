@@ -2,12 +2,15 @@ import { useState, type FormEvent, type DragEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { LOCALES, LOCALE_LABELS, useI18n } from './i18n';
 import { isPlatformRole } from './types';
 
 export function AddCompanyPage() {
   const { session, refreshCompanies } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [defaultLanguage, setDefaultLanguage] = useState('en');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -23,7 +26,7 @@ export function AddCompanyPage() {
       return;
     }
     if (!next.name.toLowerCase().endsWith('.txt')) {
-      setError('Only .txt guideline files are supported');
+      setError(t('addCompany.onlyTxt'));
       return;
     }
     setError(null);
@@ -43,6 +46,7 @@ export function AddCompanyPage() {
     try {
       const body = new FormData();
       body.append('name', name.trim());
+      body.append('defaultLanguage', defaultLanguage);
       if (file) {
         body.append('file', file);
       }
@@ -50,7 +54,9 @@ export function AddCompanyPage() {
       await refreshCompanies();
       navigate('/companies');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create company');
+      setError(
+        err instanceof Error ? err.message : t('addCompany.createFailed'),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -59,10 +65,8 @@ export function AddCompanyPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-text">Add New Company</h1>
-        <p className="mt-1 text-sm text-muted-strong">
-          Add a new company and upload its support guidelines
-        </p>
+        <h1 className="text-2xl font-bold text-text">{t('addCompany.title')}</h1>
+        <p className="mt-1 text-sm text-muted-strong">{t('addCompany.subtitle')}</p>
       </div>
 
       <div className="bg-surface shadow sm:rounded-lg">
@@ -73,7 +77,7 @@ export function AddCompanyPage() {
                 htmlFor="company-name"
                 className="block text-sm font-medium text-muted-strong"
               >
-                Company Name
+                {t('addCompany.name')}
               </label>
               <div className="mt-1">
                 <input
@@ -84,14 +88,36 @@ export function AddCompanyPage() {
                   value={name}
                   onChange={(e) => setName(e.currentTarget.value)}
                   className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-border-strong rounded-md border px-3 py-2"
-                  placeholder="Enter company name"
+                  placeholder={t('addCompany.namePlaceholder')}
                 />
               </div>
             </div>
 
             <div>
+              <label
+                htmlFor="company-default-language"
+                className="block text-sm font-medium text-muted-strong"
+              >
+                {t('addCompany.defaultLanguage')}
+              </label>
+              <select
+                id="company-default-language"
+                name="company-default-language"
+                value={defaultLanguage}
+                onChange={(e) => setDefaultLanguage(e.currentTarget.value)}
+                className="mt-1 block w-full sm:w-auto rounded-md border border-border-strong shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm px-3 py-2 bg-surface text-text"
+              >
+                {LOCALES.map((code) => (
+                  <option key={code} value={code}>
+                    {LOCALE_LABELS[code]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-muted-strong">
-                Guidelines File
+                {t('addCompany.guidelinesFile')}
               </label>
               <div
                 className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md ${
@@ -116,7 +142,7 @@ export function AddCompanyPage() {
                       htmlFor="file-upload"
                       className="relative cursor-pointer bg-surface rounded-md font-medium text-primary hover:text-primary-hover focus-within:outline-none"
                     >
-                      <span>Upload a file</span>
+                      <span>{t('addCompany.uploadFile')}</span>
                       <input
                         id="file-upload"
                         name="file-upload"
@@ -128,12 +154,12 @@ export function AddCompanyPage() {
                         }
                       />
                     </label>
-                    <p className="pl-1">or drag and drop</p>
+                    <p className="ps-1">{t('addCompany.orDragDrop')}</p>
                   </div>
-                  <p className="text-xs text-muted">TXT file up to 10MB</p>
+                  <p className="text-xs text-muted">{t('addCompany.txtLimit')}</p>
                   {file && (
                     <p className="text-sm text-muted-strong pt-2">
-                      Selected: <span className="font-medium">{file.name}</span>
+                      {t('addCompany.selected', { name: file.name })}
                     </p>
                   )}
                 </div>
@@ -151,14 +177,14 @@ export function AddCompanyPage() {
                 to="/companies"
                 className="inline-flex justify-center py-2 px-4 border border-border-strong shadow-sm text-sm font-medium rounded-md text-muted-strong bg-surface hover:bg-bg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
-                Cancel
+                {t('addCompany.cancel')}
               </Link>
               <button
                 type="submit"
                 disabled={submitting || !name.trim()}
                 className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-60"
               >
-                {submitting ? 'Saving…' : 'Add Company'}
+                {submitting ? t('addCompany.saving') : t('addCompany.submit')}
               </button>
             </div>
           </form>

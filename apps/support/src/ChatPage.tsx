@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { io, type Socket } from 'socket.io-client';
 import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
 import { useAuth } from './auth';
+import { LanguageSelect } from './i18n/LanguageSelect';
+import { useI18n } from './i18n';
 import { nextThemePreference, useTheme } from './theme';
 
 type MessageStatus =
@@ -138,6 +140,7 @@ function formatWhen(value: string | null): string {
 export function ChatPage() {
   const { session, loading, logout } = useAuth();
   const { preference, setPreference } = useTheme();
+  const { t } = useI18n();
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatBubble[]>([]);
@@ -407,7 +410,7 @@ export function ChatPage() {
         }
         void loadConversations().catch(() => undefined);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Send failed');
+        setError(err instanceof Error ? err.message : t('chat.sendFailed'));
         setMessages((prev) =>
           prev.filter((m) => m.id !== localUserId && m.id !== localAssistantId),
         );
@@ -445,7 +448,7 @@ export function ChatPage() {
           method: 'POST',
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Stop failed');
+        setError(err instanceof Error ? err.message : t('chat.stopFailed'));
       } finally {
         setStoppingIds((prev) => {
           const next = new Set(prev);
@@ -487,7 +490,7 @@ export function ChatPage() {
       } catch (err) {
         pendingIdsRef.current.delete(assistantId);
         disconnectSocketIfIdle();
-        setError(err instanceof Error ? err.message : 'Retry failed');
+        setError(err instanceof Error ? err.message : t('chat.retryFailed'));
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, status: 'failed' } : m,
@@ -501,12 +504,12 @@ export function ChatPage() {
   if (loading || !session) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center text-muted-strong">
-        {'Loading…'}
+        {t('common.loading')}
       </div>
     );
   }
 
-  const companyName = session.activeCompany?.name ?? 'No company';
+  const companyName = session.activeCompany?.name ?? t('chat.noCompany');
   const hasInFlight = messages.some(
     (m) => m.role === 'assistant' && isInFlight(m.status),
   );
@@ -518,13 +521,14 @@ export function ChatPage() {
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-8">
               <h1 className="text-xl font-bold text-primary">
-                {'AI Support Assistant'}
+                {t('common.appName')}
               </h1>
               <span className="border-primary text-text inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                {'Chat'}
+                {t('chat.nav')}
               </span>
             </div>
             <div className="flex items-center gap-4">
+              <LanguageSelect />
               <span className="text-sm text-muted-strong hidden sm:inline">
                 {session.user.name}
               </span>
@@ -545,7 +549,7 @@ export function ChatPage() {
                 onClick={() => void logout()}
                 className="text-sm font-medium text-primary hover:text-primary-hover"
               >
-                {'Log out'}
+                {t('common.logOut')}
               </button>
             </div>
           </div>
@@ -554,8 +558,8 @@ export function ChatPage() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-text">{'Support Chat'}</h1>
-          <p className="mt-1 text-sm text-muted-strong">{'Recommend replies using your company guidelines'}</p>
+          <h1 className="text-2xl font-bold text-text">{t('chat.title')}</h1>
+          <p className="mt-1 text-sm text-muted-strong">{t('chat.subtitle')}</p>
         </div>
 
         <div className="flex gap-4 h-[640px]">
@@ -764,13 +768,13 @@ export function ChatPage() {
                   <p className="text-sm text-gray-500 text-center py-8">
                     {activeId
                       ? 'No messages in this conversation yet.'
-                      : 'Enter a customer message to get started.'}
+                      : t('chat.getStarted')}
                   </p>
                 )}
                 {messages.map((msg) => {
                   const isAssistant = msg.role === 'assistant';
                   const label = isAssistant
-                    ? 'AI'
+                    ? t('chat.ai')
                     : session.user.name.slice(0, 1).toUpperCase();
 
                   return (
@@ -789,8 +793,8 @@ export function ChatPage() {
                           <div className="space-y-2">
                             <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
                               {msg.status === 'processing'
-                                ? 'Generating reply…'
-                                : 'Queued…'}
+                                ? t('chat.generating')
+                                : t('chat.queued')}
                             </span>
                             <button
                               type="button"
@@ -799,14 +803,14 @@ export function ChatPage() {
                               className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-60"
                             >
                               {stoppingIds.has(msg.id)
-                                ? 'Stopping…'
-                                : 'Stop'}
+                                ? t('chat.stopping')
+                                : t('chat.stop')}
                             </button>
                           </div>
                         ) : msg.status === 'failed' ? (
                           <div className="space-y-2">
                             <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700">
-                              {msg.lastError || 'Generation failed'}
+                              {msg.lastError || t('chat.generationFailed')}
                             </span>
                             {!viewOnly && (
                               <button
@@ -814,13 +818,13 @@ export function ChatPage() {
                                 onClick={() => void onRetry(msg.id)}
                                 className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                               >
-                                {'Retry'}
+                                {t('chat.retry')}
                               </button>
                             )}
                           </div>
                         ) : msg.status === 'cancelled' ? (
                           <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-50 text-gray-400 italic">
-                            {'Stopped'}
+                            {t('chat.stopped')}
                           </span>
                         ) : (
                           <span
@@ -885,8 +889,8 @@ export function ChatPage() {
                     viewOnly
                       ? 'This conversation is closed — reopen to send messages'
                       : hasInFlight
-                        ? 'Send to cancel current reply and ask again'
-                        : 'Customer message (Shift+Enter for new line)'
+                        ? t('chat.sendToCancel')
+                        : t('chat.placeholder')
                   }
                   className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[4.5rem] disabled:bg-gray-100 disabled:text-gray-400"
                 />
@@ -896,10 +900,10 @@ export function ChatPage() {
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
                 >
                   {sending
-                    ? 'Sending…'
+                    ? t('chat.sending')
                     : hasInFlight
-                      ? 'Send (take over)'
-                      : 'Send'}
+                      ? t('chat.sendTakeOver')
+                      : t('chat.send')}
                 </button>
               </form>
             </div>

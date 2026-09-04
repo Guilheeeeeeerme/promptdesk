@@ -7,9 +7,11 @@ import {
 } from '@shared/auth';
 import { getAllowedReturnOrigins } from './api';
 import { useAuth } from './auth';
+import { useI18n } from './i18n';
 
 export function LoginPage() {
   const { session, loading, login } = useAuth();
+  const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
   const [email, setEmail] = useState('');
@@ -29,7 +31,7 @@ export function LoginPage() {
       window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
       return (
         <div className="min-h-screen bg-bg flex items-center justify-center text-muted-strong">
-          Continuing…
+          {t('common.continuing')}
         </div>
       );
     }
@@ -41,7 +43,7 @@ export function LoginPage() {
     setError(null);
 
     if (returnUrl && !validReturnUrl) {
-      setError('Invalid return URL');
+      setError(t('login.invalidReturnUrl'));
       return;
     }
 
@@ -54,7 +56,7 @@ export function LoginPage() {
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : t('login.loginFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -64,10 +66,12 @@ export function LoginPage() {
     <div className="min-h-screen bg-bg flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h1 className="text-center text-3xl font-bold text-primary">
-          AI Support Assistant
+          {t('common.appName')}
         </h1>
         <p className="mt-2 text-center text-sm text-muted-strong">
-          {validReturnUrl ? 'Sign in to continue' : 'Sign in to your account'}
+          {validReturnUrl
+            ? t('login.signInToContinue')
+            : t('login.signInToAccount')}
         </p>
       </div>
 
@@ -79,7 +83,7 @@ export function LoginPage() {
                 htmlFor="email"
                 className="block text-sm font-medium text-muted-strong"
               >
-                Email
+                {t('login.email')}
               </label>
               <input
                 id="email"
@@ -97,7 +101,7 @@ export function LoginPage() {
                 htmlFor="password"
                 className="block text-sm font-medium text-muted-strong"
               >
-                Password
+                {t('login.password')}
               </label>
               <input
                 id="password"
@@ -121,7 +125,7 @@ export function LoginPage() {
               disabled={submitting}
               className="w-full flex justify-center rounded-md border border-transparent bg-primary py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-60"
             >
-              {submitting ? 'Signing in…' : 'Sign in'}
+              {submitting ? t('login.signingIn') : t('login.signIn')}
             </button>
           </form>
         </div>

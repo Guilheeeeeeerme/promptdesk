@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Req,
@@ -18,6 +19,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
+import { UpdateCompanyDto } from './dto/update-company.dto';
 
 const guidelineUpload = FileInterceptor('file', {
   storage: memoryStorage(),
@@ -39,6 +41,15 @@ export class CompaniesController {
     return this.companies.getOne(req.session, id);
   }
 
+  @Patch(':id')
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateCompanyDto,
+  ) {
+    return this.companies.update(req.session, id, body.defaultLanguage);
+  }
+
   @Post()
   @UseInterceptors(guidelineUpload)
   create(
@@ -46,7 +57,12 @@ export class CompaniesController {
     @Body() body: CreateCompanyDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.companies.create(req.session, body.name, file);
+    return this.companies.create(
+      req.session,
+      body.name,
+      file,
+      body.defaultLanguage,
+    );
   }
 
   @Put(':id/guidelines')

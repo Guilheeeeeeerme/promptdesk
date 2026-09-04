@@ -3,12 +3,14 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { appendTokenToReturnUrl } from '@shared/auth';
 import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
+import { LanguageSelect } from './i18n/LanguageSelect';
+import { useI18n } from './i18n';
 import { nextThemePreference, useTheme } from './theme';
 
 const navItems = [
-  { to: '/', label: 'Home', exact: true },
-  { to: '/history', label: 'History' },
-  { to: '/companies', label: 'Companies' },
+  { to: '/', labelKey: 'nav.home', exact: true },
+  { to: '/history', labelKey: 'nav.history' },
+  { to: '/companies', labelKey: 'nav.companies' },
 ];
 
 function supportHref(): string {
@@ -23,6 +25,7 @@ export function AppShell() {
   const { session, loading, logout, companies, canSwitchCompany, switchCompany } =
     useAuth();
   const { preference, setPreference } = useTheme();
+  const { t } = useI18n();
   const location = useLocation();
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -30,7 +33,7 @@ export function AppShell() {
   if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center text-muted-strong">
-        Loading session…
+        {t('common.loading')}
       </div>
     );
   }
@@ -49,7 +52,9 @@ export function AppShell() {
     try {
       await switchCompany(companyId);
     } catch (err) {
-      setSwitchError(err instanceof Error ? err.message : 'Switch failed');
+      setSwitchError(
+        err instanceof Error ? err.message : t('shell.switchFailed'),
+      );
     } finally {
       setSwitching(false);
     }
@@ -63,10 +68,10 @@ export function AppShell() {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <h1 className="text-xl font-bold text-primary">
-                  AI Support Assistant
+                  {t('common.appName')}
                 </h1>
               </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <div className="hidden sm:ms-6 sm:flex sm:space-x-8">
                 {navItems.map((item) => {
                   const active = item.exact
                     ? location.pathname === item.to
@@ -81,7 +86,7 @@ export function AppShell() {
                           : 'border-transparent text-muted hover:border-border-strong hover:text-muted-strong inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
                       }
                     >
-                      {item.label}
+                      {t(item.labelKey)}
                     </Link>
                   );
                 })}
@@ -90,14 +95,12 @@ export function AppShell() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => {
-                    // Always hand the current Main token so Support shares the
-                    // same Redis session (including latest activeCompanyId).
                     e.preventDefault();
                     window.open(supportHref(), '_blank', 'noopener,noreferrer');
                   }}
                   className="border-transparent text-muted hover:border-border-strong hover:text-muted-strong inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
-                  Chat
+                  {t('nav.chat')}
                 </a>
               </div>
             </div>
@@ -108,7 +111,7 @@ export function AppShell() {
                     htmlFor="company-switcher"
                     className="text-sm text-muted hidden md:inline"
                   >
-                    Company
+                    {t('shell.company')}
                   </label>
                   <select
                     id="company-switcher"
@@ -125,6 +128,7 @@ export function AppShell() {
                   </select>
                 </div>
               )}
+              <LanguageSelect />
               <span className="text-sm text-muted-strong hidden lg:inline">
                 {session.user.name} ({session.user.role})
               </span>
@@ -145,7 +149,7 @@ export function AppShell() {
                 onClick={() => void logout()}
                 className="text-sm font-medium text-primary hover:text-primary-hover"
               >
-                Log out
+                {t('common.logOut')}
               </button>
             </div>
           </div>

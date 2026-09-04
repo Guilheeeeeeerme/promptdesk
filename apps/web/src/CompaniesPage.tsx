@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { useI18n } from './i18n';
 import type { Company, CompanyDetail } from './types';
 import { isPlatformRole } from './types';
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return 'Never';
+  if (!value) return '';
   return new Date(value).toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -42,6 +43,7 @@ function accentFor(name: string): { bg: string; icon: string } {
 
 export function CompaniesPage() {
   const { session, refreshCompanies } = useAuth();
+  const { t } = useI18n();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,12 +69,14 @@ export function CompaniesPage() {
       try {
         await load();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load companies');
+        setError(
+          err instanceof Error ? err.message : t('companies.loadFailed'),
+        );
       } finally {
         setLoading(false);
       }
     })();
-  }, [load]);
+  }, [load, t]);
 
   async function openGuidelines(companyId: string) {
     setViewLoading(true);
@@ -81,7 +85,9 @@ export function CompaniesPage() {
       const detail = await apiFetch<CompanyDetail>(`/companies/${companyId}`);
       setViewing(detail);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load guidelines');
+      setError(
+        err instanceof Error ? err.message : t('companies.guidelinesLoadFailed'),
+      );
     } finally {
       setViewLoading(false);
     }
@@ -104,7 +110,7 @@ export function CompaniesPage() {
         await openGuidelines(companyId);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      setError(err instanceof Error ? err.message : t('companies.uploadFailed'));
     } finally {
       setBusyId(null);
       const input = fileInputs.current[companyId];
@@ -113,7 +119,7 @@ export function CompaniesPage() {
   }
 
   async function onClear(companyId: string) {
-    if (!window.confirm('Clear guidelines for this company?')) return;
+    if (!window.confirm(t('companies.clearConfirm'))) return;
     setBusyId(companyId);
     setError(null);
     try {
@@ -136,23 +142,23 @@ export function CompaniesPage() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Clear failed');
+      setError(err instanceof Error ? err.message : t('companies.clearFailed'));
     } finally {
       setBusyId(null);
     }
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-strong">Loading companies…</p>;
+    return <p className="text-sm text-muted-strong">{t('companies.loading')}</p>;
   }
 
   return (
     <div>
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text">Companies</h1>
+          <h1 className="text-2xl font-bold text-text">{t('companies.title')}</h1>
           <p className="mt-1 text-sm text-muted-strong">
-            Manage company information and guidelines
+            {t('companies.subtitle')}
           </p>
         </div>
         {canCreate && (
@@ -161,8 +167,8 @@ export function CompaniesPage() {
               to="/companies/new"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
-              <i className="fas fa-plus mr-2" aria-hidden="true" />
-              Add Company
+              <i className="fas fa-plus me-2" aria-hidden="true" />
+              {t('companies.addCompany')}
             </Link>
           </div>
         )}
@@ -177,7 +183,7 @@ export function CompaniesPage() {
       <div className="bg-surface shadow overflow-hidden sm:rounded-md">
         {companies.length === 0 ? (
           <p className="px-4 py-8 text-sm text-muted text-center">
-            No companies available for your account.
+            {t('companies.empty')}
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -197,14 +203,14 @@ export function CompaniesPage() {
                             aria-hidden="true"
                           />
                         </div>
-                        <div className="ml-4 min-w-0">
+                        <div className="ms-4 min-w-0">
                           <div className="text-sm font-medium text-primary truncate">
                             {company.name}
                           </div>
                           <div className="text-sm text-muted truncate">
                             {company.guidelineFileName
                               ? company.guidelineFileName
-                              : 'No guidelines uploaded'}
+                              : t('companies.noGuidelines')}
                           </div>
                         </div>
                       </div>
@@ -215,8 +221,8 @@ export function CompaniesPage() {
                           onClick={() => void openGuidelines(company.id)}
                           className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-500/20 hover:bg-indigo-200 dark:hover:bg-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                         >
-                          <i className="fas fa-eye mr-1" aria-hidden="true" />
-                          View
+                          <i className="fas fa-eye me-1" aria-hidden="true" />
+                          {t('companies.view')}
                         </button>
                         {canManage && (
                           <>
@@ -242,12 +248,12 @@ export function CompaniesPage() {
                               }`}
                             >
                               <i
-                                className="fas fa-file-upload mr-1"
+                                className="fas fa-file-upload me-1"
                                 aria-hidden="true"
                               />
                               {company.hasGuidelines
-                                ? 'Replace Guidelines'
-                                : 'Upload Guidelines'}
+                                ? t('companies.replaceGuidelines')
+                                : t('companies.uploadGuidelines')}
                             </label>
                             {company.hasGuidelines && (
                               <button
@@ -257,10 +263,10 @@ export function CompaniesPage() {
                                 className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-60"
                               >
                                 <i
-                                  className="fas fa-trash mr-1"
+                                  className="fas fa-trash me-1"
                                   aria-hidden="true"
                                 />
-                                Clear
+                                {t('companies.clear')}
                               </button>
                             )}
                           </>
@@ -270,23 +276,29 @@ export function CompaniesPage() {
                     <div className="mt-2 sm:flex sm:justify-between">
                       <div className="flex items-center text-sm text-muted">
                         <i
-                          className="fas fa-file-alt flex-shrink-0 mr-1.5 text-gray-400 dark:text-gray-500"
+                          className="fas fa-file-alt flex-shrink-0 me-1.5 text-gray-400 dark:text-gray-500"
                           aria-hidden="true"
                         />
                         <p>
-                          Guidelines last updated on{' '}
-                          <time dateTime={company.guidelineUpdatedAt ?? undefined}>
-                            {formatDate(company.guidelineUpdatedAt)}
+                          {t('companies.updatedOn')}{' '}
+                          <time
+                            dateTime={company.guidelineUpdatedAt ?? undefined}
+                          >
+                            {company.guidelineUpdatedAt
+                              ? formatDate(company.guidelineUpdatedAt)
+                              : t('companies.never')}
                           </time>
                         </p>
                       </div>
                       <div className="mt-2 flex items-center text-sm text-muted sm:mt-0">
                         <i
-                          className="fas fa-comments flex-shrink-0 mr-1.5 text-gray-400 dark:text-gray-500"
+                          className="fas fa-comments flex-shrink-0 me-1.5 text-gray-400 dark:text-gray-500"
                           aria-hidden="true"
                         />
                         <p>
-                          {company.messageCount ?? 0} support conversations
+                          {t('companies.conversations', {
+                            count: company.messageCount ?? 0,
+                          })}
                         </p>
                       </div>
                     </div>
@@ -312,12 +324,12 @@ export function CompaniesPage() {
                   id="guidelines-title"
                   className="text-lg font-semibold text-text"
                 >
-                  {viewing.name} guidelines
+                  {t('companies.guidelinesTitle', { name: viewing.name })}
                 </h2>
                 <p className="text-sm text-muted mt-1">
-                  {viewing.guidelineFileName ?? 'No file uploaded'}
+                  {viewing.guidelineFileName ?? t('companies.noFile')}
                   {viewing.guidelineUpdatedAt
-                    ? ` · updated ${formatDate(viewing.guidelineUpdatedAt)}`
+                    ? ` · ${t('companies.updatedOn')} ${formatDate(viewing.guidelineUpdatedAt)}`
                     : ''}
                 </p>
               </div>
@@ -326,13 +338,13 @@ export function CompaniesPage() {
                 onClick={() => setViewing(null)}
                 className="text-muted hover:text-text text-sm font-medium"
               >
-                Close
+                {t('companies.close')}
               </button>
             </div>
             <pre className="px-4 py-4 overflow-auto text-sm text-text whitespace-pre-wrap flex-1">
               {viewing.guidelineText?.trim()
                 ? viewing.guidelineText
-                : 'No guidelines uploaded for this company yet.'}
+                : t('companies.emptyGuidelines')}
             </pre>
           </div>
         </div>
