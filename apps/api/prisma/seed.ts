@@ -1,4 +1,5 @@
 import { PrismaClient, Role } from '@prisma/client';
+import { createHash } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -10,6 +11,37 @@ const SEED_PASSWORD = 'Password123!';
 function readGuideline(fileName: string): string {
   const filePath = path.join(__dirname, 'seed-guidelines', fileName);
   return fs.readFileSync(filePath, 'utf8');
+}
+
+// Creates version 1 for a company that has no guideline versions yet and
+// points the company at it. Idempotent: existing version history is kept.
+async function ensureInitialGuidelineVersion(
+  companyId: string,
+  content: string,
+  fileName: string,
+): Promise<void> {
+  const hasVersions = await prisma.guidelineVersion.findFirst({
+    where: { companyId },
+    select: { id: true },
+  });
+  if (hasVersions) return;
+
+  const buffer = Buffer.from(content, 'utf8');
+  const version = await prisma.guidelineVersion.create({
+    data: {
+      companyId,
+      version: 1,
+      content,
+      fileName,
+      contentHash: createHash('sha256').update(buffer).digest('hex'),
+      byteSize: buffer.byteLength,
+    },
+  });
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { currentGuidelineVersionId: version.id },
+  });
 }
 
 async function main() {
@@ -47,6 +79,17 @@ async function main() {
       guidelineUpdatedAt: now,
     },
   });
+
+  await ensureInitialGuidelineVersion(
+    bookshop.id,
+    bookshopGuidelines,
+    'bookshop_support_guidelines.txt',
+  );
+  await ensureInitialGuidelineVersion(
+    vpn.id,
+    vpnGuidelines,
+    'vpn_support_guidelines.txt',
+  );
 
   const users: Array<{
     email: string;
@@ -111,7 +154,9 @@ async function main() {
     });
   }
 
-  console.log('Seed complete: Bookshop, VPN SaaS, guidelines, 6 users');
+  console.log(
+    'Seed complete: Bookshop, VPN SaaS, guidelines (v1 history), 6 users',
+  );
 }
 
 main()
