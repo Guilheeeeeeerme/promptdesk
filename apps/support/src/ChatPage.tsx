@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { apiFetch, getApiOrigin, getSocketPath, getToken, MAIN_ORIGIN } from './api';
+import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
 import { useAuth } from './auth';
 
 type MessageStatus =
@@ -522,12 +522,6 @@ export function ChatPage() {
               <span className="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                 Chat
               </span>
-              <a
-                href={MAIN_ORIGIN}
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-              >
-                Main app
-              </a>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-600 hidden sm:inline">
