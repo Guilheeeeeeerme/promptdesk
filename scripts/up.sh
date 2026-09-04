@@ -8,6 +8,7 @@ cd "$ROOT/apps/api"
 npm install --no-audit --no-fund
 rm -f tsconfig.build.tsbuildinfo
 npx prisma generate
+npx prisma generate --schema prisma-chat/schema.prisma
 npm run build
 test -f dist/main.js
 
@@ -27,6 +28,14 @@ VITE_API_URL=/api \
 VITE_MAIN_ORIGIN="${VITE_MAIN_ORIGIN:-http://localhost:8080}" \
   npm run build
 test -f dist/index.html
+
+echo "==> Installing and building Chat Worker"
+cd "$ROOT/apps/chat-worker"
+npm install --no-audit --no-fund
+npx prisma generate --schema ../api/prisma/schema.prisma
+npx prisma generate --schema ../api/prisma-chat/schema.prisma
+npm run build
+test -f dist/main.js
 
 echo "==> Starting Docker Compose"
 cd "$ROOT"

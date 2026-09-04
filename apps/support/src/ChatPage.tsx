@@ -3,21 +3,71 @@ import { io, type Socket } from 'socket.io-client';
 import { apiFetch, getApiOrigin, getSocketPath, getToken, MAIN_ORIGIN } from './api';
 import { useAuth } from './auth';
 
+type MessageStatus =
+  | 'completed'
+  | 'pending'
+  | 'processing'
+  | 'failed'
+  | 'cancelled';
+
 interface ChatBubble {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  status: MessageStatus;
+  lastError?: string | null;
+  parentMessageId?: string | null;
+}
+
+interface ChatMessageDto {
+  id: string;
+  content: string;
+  role: string;
+  status: MessageStatus;
+  parentMessageId: string | null;
+  attemptCount: number;
+  lastError: string | null;
+  model: string | null;
+  createdAt: string;
 }
 
 interface ChatResponse {
   status: string;
   reply: null;
-  message: {
-    id: string;
-    content: string;
-    role: string;
-    createdAt: string;
-  };
+  message: ChatMessageDto;
+  assistantMessage: ChatMessageDto;
+}
+
+interface RetryResponse {
+  status: string;
+  assistantMessage: ChatMessageDto;
+}
+
+interface StopResponse {
+  status: string;
+  assistantMessage: ChatMessageDto;
+}
+
+interface JobUpdateEvent {
+  userId: string;
+  assistantMessageId: string;
+  userMessageId: string;
+  status: MessageStatus;
+  content?: string;
+  error?: string;
+  model?: string;
+}
+
+function isInFlight(status: MessageStatus): boolean {
+  return status === 'pending' || status === 'processing';
+}
+
+function isTerminalJobStatus(status: MessageStatus): boolean {
+  return (
+    status === 'completed' ||
+    status === 'failed' ||
+    status === 'cancelled'
+  );
 }
 
 export function ChatPage() {
@@ -25,15 +75,32 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatBubble[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
+  const pendingIdsRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (!session) return;
+  const disconnectSocketIfIdle = useCallback(() => {
+    if (pendingIdsRef.current.size > 0) return;
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+  }, []);
 
+  const ensureSocket = useCallback(() => {
     const token = getToken();
-    if (!token) return;
+    if (!token) return null;
+
+    if (socketRef.current?.connected) {
+      return socketRef.current;
+    }
+
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
 
     const socket = io(getApiOrigin(), {
       path: getSocketPath(),
@@ -41,13 +108,89 @@ export function ChatPage() {
       query: { token },
       transports: ['websocket', 'polling'],
     });
+
+    socket.on('job:update', (event: JobUpdateEvent) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== event.assistantMessageId) return m;
+          return {
+            ...m,
+            status: event.status,
+            content:
+              event.status === 'completed'
+                ? (event.content ?? m.content)
+                : m.content,
+            lastError: event.status === 'failed' ? (event.error ?? m.lastError) : null,
+          };
+        }),
+      );
+
+      if (isTerminalJobStatus(event.status)) {
+        pendingIdsRef.current.delete(event.assistantMessageId);
+        disconnectSocketIfIdle();
+      } else if (isInFlight(event.status)) {
+        pendingIdsRef.current.add(event.assistantMessageId);
+      }
+    });
+
     socketRef.current = socket;
+    return socket;
+  }, [disconnectSocketIfIdle]);
+
+  const trackPending = useCallback(
+    (assistantId: string) => {
+      pendingIdsRef.current.add(assistantId);
+      ensureSocket();
+    },
+    [ensureSocket],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      pendingIdsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const history = await apiFetch<ChatMessageDto[]>('/chat/messages?limit=50');
+        if (cancelled) return;
+        const bubbles: ChatBubble[] = history.map((m) => ({
+          id: m.id,
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+          status: m.status,
+          lastError: m.lastError,
+          parentMessageId: m.parentMessageId,
+        }));
+        setMessages(bubbles);
+
+        const pending = bubbles.filter(
+          (m) => m.role === 'assistant' && isInFlight(m.status),
+        );
+        if (pending.length > 0) {
+          for (const m of pending) {
+            pendingIdsRef.current.add(m.id);
+          }
+          ensureSocket();
+        }
+      } catch {
+        // History is optional; chat still works without hydrate
+      }
+    })();
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      cancelled = true;
     };
-  }, [session]);
+  }, [session?.user.id, session?.activeCompany?.id, ensureSocket]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,8 +205,31 @@ export function ChatPage() {
       setError(null);
       setSending(true);
       setInput('');
-      const localId = `local-${Date.now()}`;
-      setMessages((prev) => [...prev, { id: localId, role: 'user', content }]);
+
+      // Optimistic takeover: mark local in-flight assistants cancelled.
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.role === 'assistant' && isInFlight(m.status)
+            ? { ...m, status: 'cancelled' as const }
+            : m,
+        ),
+      );
+      for (const id of [...pendingIdsRef.current]) {
+        pendingIdsRef.current.delete(id);
+      }
+
+      const localUserId = `local-user-${Date.now()}`;
+      const localAssistantId = `local-assistant-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        { id: localUserId, role: 'user', content, status: 'completed' },
+        {
+          id: localAssistantId,
+          role: 'assistant',
+          content: '',
+          status: 'pending',
+        },
+      ]);
 
       try {
         const result = await apiFetch<ChatResponse>('/chat', {
@@ -71,19 +237,116 @@ export function ChatPage() {
           body: JSON.stringify({ message: content }),
         });
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === localId ? { ...m, id: result.message.id } : m,
-          ),
+          prev.map((m) => {
+            if (m.id === localUserId) {
+              return {
+                ...m,
+                id: result.message.id,
+                status: result.message.status,
+              };
+            }
+            if (m.id === localAssistantId) {
+              return {
+                ...m,
+                id: result.assistantMessage.id,
+                status: result.assistantMessage.status,
+                parentMessageId: result.assistantMessage.parentMessageId,
+              };
+            }
+            return m;
+          }),
         );
-        socketRef.current?.emit('chat', { message: content });
+        trackPending(result.assistantMessage.id);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Send failed');
-        setMessages((prev) => prev.filter((m) => m.id !== localId));
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== localUserId && m.id !== localAssistantId),
+        );
       } finally {
         setSending(false);
       }
     },
-    [input, sending],
+    [input, sending, trackPending],
+  );
+
+  const onStop = useCallback(
+    async (assistantId: string) => {
+      setError(null);
+      setStoppingIds((prev) => new Set(prev).add(assistantId));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, status: 'cancelled' as const } : m,
+        ),
+      );
+      pendingIdsRef.current.delete(assistantId);
+      disconnectSocketIfIdle();
+
+      // Optimistic local bubbles have no server row yet.
+      if (assistantId.startsWith('local-')) {
+        setStoppingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(assistantId);
+          return next;
+        });
+        return;
+      }
+
+      try {
+        await apiFetch<StopResponse>(`/chat/messages/${assistantId}/stop`, {
+          method: 'POST',
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Stop failed');
+      } finally {
+        setStoppingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(assistantId);
+          return next;
+        });
+      }
+    },
+    [disconnectSocketIfIdle],
+  );
+
+  const onRetry = useCallback(
+    async (assistantId: string) => {
+      setError(null);
+      try {
+        trackPending(assistantId);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, status: 'pending', lastError: null, content: '' }
+              : m,
+          ),
+        );
+        const result = await apiFetch<RetryResponse>(
+          `/chat/messages/${assistantId}/retry`,
+          { method: 'POST' },
+        );
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  status: result.assistantMessage.status,
+                  lastError: result.assistantMessage.lastError,
+                }
+              : m,
+          ),
+        );
+      } catch (err) {
+        pendingIdsRef.current.delete(assistantId);
+        disconnectSocketIfIdle();
+        setError(err instanceof Error ? err.message : 'Retry failed');
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, status: 'failed' } : m,
+          ),
+        );
+      }
+    },
+    [trackPending, disconnectSocketIfIdle],
   );
 
   if (loading || !session) {
@@ -95,6 +358,9 @@ export function ChatPage() {
   }
 
   const companyName = session.activeCompany?.name ?? 'No company';
+  const hasInFlight = messages.some(
+    (m) => m.role === 'assistant' && isInFlight(m.status),
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -159,18 +425,72 @@ export function ChatPage() {
                   Enter a customer message to get started.
                 </p>
               )}
-              {messages.map((msg) => (
-                <div key={msg.id} className="flex items-end">
-                  <div className="w-8 h-8 rounded-full bg-indigo-200 flex items-center justify-center text-xs text-indigo-700">
-                    {session.user.name.slice(0, 1).toUpperCase()}
+              {messages.map((msg) => {
+                const isAssistant = msg.role === 'assistant';
+                const label = isAssistant
+                  ? 'AI'
+                  : session.user.name.slice(0, 1).toUpperCase();
+
+                return (
+                  <div key={msg.id} className="flex items-end">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${
+                        isAssistant
+                          ? 'bg-emerald-200 text-emerald-800'
+                          : 'bg-indigo-200 text-indigo-700'
+                      }`}
+                    >
+                      {label}
+                    </div>
+                    <div className="flex flex-col space-y-2 text-sm max-w-xl mx-2 items-start">
+                      {isInFlight(msg.status) ? (
+                        <div className="space-y-2">
+                          <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
+                            {msg.status === 'processing'
+                              ? 'Generating reply…'
+                              : 'Queued…'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void onStop(msg.id)}
+                            disabled={stoppingIds.has(msg.id)}
+                            className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-60"
+                          >
+                            {stoppingIds.has(msg.id) ? 'Stopping…' : 'Stop'}
+                          </button>
+                        </div>
+                      ) : msg.status === 'failed' ? (
+                        <div className="space-y-2">
+                          <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700">
+                            {msg.lastError || 'Generation failed'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void onRetry(msg.id)}
+                            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : msg.status === 'cancelled' ? (
+                        <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-50 text-gray-400 italic">
+                          Stopped
+                        </span>
+                      ) : (
+                        <span
+                          className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap ${
+                            isAssistant
+                              ? 'bg-emerald-50 text-gray-800'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {msg.content}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-col space-y-2 text-sm max-w-xl mx-2 items-start">
-                    <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-700 whitespace-pre-wrap">
-                      {msg.content}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={bottomRef} />
             </div>
           </div>
@@ -182,20 +502,30 @@ export function ChatPage() {
           )}
 
           <div className="border-t border-gray-200 px-4 py-3">
-            <form className="flex items-center" onSubmit={onSend}>
-              <input
-                type="text"
+            <form className="flex items-end gap-3" onSubmit={onSend}>
+              <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Customer message"
-                className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                rows={3}
+                placeholder={
+                  hasInFlight
+                    ? 'Send to cancel current reply and ask again'
+                    : 'Customer message (Shift+Enter for new line)'
+                }
+                className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[4.5rem]"
               />
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
-                className="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
               >
-                {sending ? 'Sending…' : 'Send'}
+                {sending ? 'Sending…' : hasInFlight ? 'Send (take over)' : 'Send'}
               </button>
             </form>
           </div>
