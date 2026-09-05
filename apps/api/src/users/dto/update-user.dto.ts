@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MinLength,
 } from 'class-validator';
 import { Role } from '@prisma/client';
@@ -17,6 +18,7 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @Matches(/\S/)
   name?: string;
 
   @IsOptional()
