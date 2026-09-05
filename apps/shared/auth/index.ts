@@ -46,8 +46,23 @@ export async function apiFetch<T>(
   });
 
   if (response.status === 401) {
-    clearToken();
-    throw new ApiError(401, 'Unauthorized');
+    // Login returns 401 with "Invalid email or password"; other routes mean
+    // the session is gone. Always prefer the API message when present.
+    let message = 'Unauthorized';
+    try {
+      const data = (await response.json()) as { message?: string | string[] };
+      if (Array.isArray(data.message)) {
+        message = data.message.join(', ');
+      } else if (typeof data.message === 'string' && data.message.trim()) {
+        message = data.message;
+      }
+    } catch {
+      // ignore parse errors
+    }
+    if (!path.includes('/auth/login')) {
+      clearToken();
+    }
+    throw new ApiError(401, message);
   }
 
   if (!response.ok) {
