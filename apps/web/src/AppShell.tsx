@@ -24,6 +24,25 @@ function supportHref(): string {
   return token ? appendTokenToReturnUrl(base, token) : base;
 }
 
+function ExternalLinkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M6.5 3.5H3.5A1 1 0 0 0 2.5 4.5v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
+      <path d="M9.5 2.5h4v4" />
+      <path d="M7.5 8.5 13.5 2.5" />
+    </svg>
+  );
+}
+
 export function AppShell() {
   const { session, loading, logout, companies, canSwitchCompany, switchCompany } =
     useAuth();
@@ -143,9 +162,11 @@ export function AppShell() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={openSupport}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  aria-label="Chat (opens in new tab)"
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center gap-1 px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Chat
+                  <ExternalLinkIcon className="size-3.5 shrink-0" />
                 </a>
               </div>
             </div>
@@ -238,9 +259,11 @@ export function AppShell() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={openSupport}
-            className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            aria-label="Chat (opens in new tab)"
+            className="flex items-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Chat
+            <ExternalLinkIcon className="size-3.5 shrink-0" />
           </a>
         </nav>
         {canSwitchCompany && (
