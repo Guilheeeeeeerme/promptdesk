@@ -12,19 +12,30 @@ type MessageStatus =
 
 type ConversationStatus =
   | 'open'
-  | 'in_progress'
   | 'solved'
-  | 'not_solved';
+  | 'not_solved'
+  | 'wont_solve';
 
+/** Agents (owners) may pick only these; wont_solve is a platform decision. */
 const CONVERSATION_STATUSES: ConversationStatus[] = [
   'open',
-  'in_progress',
   'solved',
   'not_solved',
 ];
 
-/** solved / not_solved are final: view-only transcript until reopened. */
-const FINAL_STATUSES: ConversationStatus[] = ['solved', 'not_solved'];
+const ALL_CONVERSATION_STATUSES: ConversationStatus[] = [
+  'open',
+  'solved',
+  'not_solved',
+  'wont_solve',
+];
+
+/** solved / not_solved / wont_solve are final: view-only transcript until reopened. */
+const FINAL_STATUSES: ConversationStatus[] = [
+  'solved',
+  'not_solved',
+  'wont_solve',
+];
 
 function isConversationFinal(status: ConversationStatus): boolean {
   return FINAL_STATUSES.includes(status);
@@ -32,16 +43,16 @@ function isConversationFinal(status: ConversationStatus): boolean {
 
 const STATUS_LABELS: Record<ConversationStatus, string> = {
   open: 'Open',
-  in_progress: 'In progress',
   solved: 'Solved',
   not_solved: 'Not solved',
+  wont_solve: "Won't solve",
 };
 
 const STATUS_BADGES: Record<ConversationStatus, string> = {
   open: 'bg-gray-100 text-gray-700',
-  in_progress: 'bg-blue-100 text-blue-700',
   solved: 'bg-emerald-100 text-emerald-700',
   not_solved: 'bg-rose-100 text-rose-700',
+  wont_solve: 'bg-slate-200 text-slate-600',
 };
 
 interface ChatBubble {
@@ -577,10 +588,10 @@ export function ChatPage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
+                  className="flex-1 min-w-0 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
                 >
                   <option value="">All statuses</option>
-                  {CONVERSATION_STATUSES.map((s) => (
+                  {ALL_CONVERSATION_STATUSES.map((s) => (
                     <option key={s} value={s}>
                       {STATUS_LABELS[s]}
                     </option>
@@ -680,9 +691,18 @@ export function ChatPage() {
                       }
                       className="rounded-md border border-gray-300 px-2 py-1 text-xs bg-white focus:border-indigo-500 focus:ring-indigo-500"
                     >
+                      {!CONVERSATION_STATUSES.includes(
+                        activeConversation.status,
+                      ) && (
+                        <option value={activeConversation.status} disabled>
+                          {STATUS_LABELS[activeConversation.status]} (platform)
+                        </option>
+                      )}
                       {CONVERSATION_STATUSES.map((s) => (
                         <option key={s} value={s}>
-                          {STATUS_LABELS[s]}
+                          {s === 'open' && isConversationFinal(activeConversation.status)
+                            ? 'Reopen'
+                            : STATUS_LABELS[s]}
                         </option>
                       ))}
                     </select>
@@ -720,30 +740,43 @@ export function ChatPage() {
               </div>
               {activeConversation && (
                 <div className="mt-2 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-0.5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        title={`Rate ${star} star${star > 1 ? 's' : ''}${
-                          activeConversation.rating === star ? ' (clear)' : ''
-                        }`}
-                        onClick={() =>
-                          void patchConversation(activeConversation.id, {
-                            rating:
-                              activeConversation.rating === star ? null : star,
-                          })
-                        }
-                        className={`text-lg leading-none ${
-                          (activeConversation.rating ?? 0) >= star
-                            ? 'text-yellow-500'
-                            : 'text-gray-300 hover:text-yellow-400'
-                        }`}
-                      >
-                        ★
-                      </button>
-                    ))}
-                  </div>
+                  {isConversationFinal(activeConversation.status) ? (
+                    <div
+                      className="flex items-center gap-1"
+                      role="group"
+                      aria-label="Rate this conversation"
+                    >
+                      <span className="text-[10px] text-gray-400 mr-1">
+                        Rate
+                      </span>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          title={`Rate ${star} star${star > 1 ? 's' : ''}${
+                            activeConversation.rating === star ? ' (clear)' : ''
+                          }`}
+                          onClick={() =>
+                            void patchConversation(activeConversation.id, {
+                              rating:
+                                activeConversation.rating === star ? null : star,
+                            })
+                          }
+                          className={`text-lg leading-none ${
+                            (activeConversation.rating ?? 0) >= star
+                              ? 'text-yellow-500'
+                              : 'text-gray-300 hover:text-yellow-400'
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-gray-400">
+                      Rate once the chat is solved / not solved
+                    </span>
+                  )}
                   <span className="text-[10px] text-gray-400 truncate">
                     {activeConversation.guidelineSnapshotHash
                       ? `Guidance bound: ${activeConversation.guidelineSnapshotHash.slice(0, 12)}…`
