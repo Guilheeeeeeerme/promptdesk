@@ -136,7 +136,11 @@ export class UsersService {
     return session.activeCompanyId;
   }
 
-  private async findTarget(id: string, companyId: string, db = this.prisma) {
+  private async findTarget(
+    id: string,
+    companyId: string,
+    db: Pick<PrismaService, 'user'> | Prisma.TransactionClient = this.prisma,
+  ) {
     const target = await db.user.findUnique({
       where: { id, companyId },
       select: USER_VIEW,
@@ -172,7 +176,7 @@ export class UsersService {
   private async assertNotLastRoot(
     target: { role: Role },
     companyId: string,
-    db = this.prisma,
+    db: Pick<PrismaService, 'user'> | Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
     if (target.role !== Role.root) return;
     const roots = await db.user.count({
