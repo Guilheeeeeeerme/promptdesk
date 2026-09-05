@@ -5,7 +5,7 @@ import { AppShell } from './AppShell';
 import { CompaniesPage } from './CompaniesPage';
 import { SUPPORT_ORIGIN } from './api';
 import { LoginPage } from './LoginPage';
-import { PlaceholderPage } from './PlaceholderPage';
+import { HistoryPage } from './HistoryPage';
 import { SessionHome } from './SessionHome';
 import { SsoHandoffPage } from './SsoHandoffPage';
 
@@ -29,15 +29,7 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route path="/" element={<SessionHome />} />
         <Route path="/chat" element={<ChatRedirect />} />
-        <Route
-          path="/history"
-          element={
-            <PlaceholderPage
-              title="Chat History"
-              description="Browse previous support interactions"
-            />
-          }
-        />
+        <Route path="/history" element={<HistoryPage />} />
         <Route path="/companies" element={<CompaniesPage />} />
         <Route path="/companies/new" element={<AddCompanyPage />} />
       </Route>
