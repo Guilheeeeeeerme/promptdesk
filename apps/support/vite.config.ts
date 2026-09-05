@@ -13,15 +13,17 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    host: true,
+    port: 8081,
+    strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/socket.io': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000',
         changeOrigin: true,
         ws: true,
       },
