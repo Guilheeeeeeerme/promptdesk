@@ -51,6 +51,10 @@ export const CONVERSATION_WONT_SOLVE_FORBIDDEN =
 export const CONVERSATION_RATING_NOT_FINISHED =
   'Rating is only available for finished conversations (solved, not solved, or won\u2019t solve)';
 
+function canViewCompanyHistory(session: SessionData): boolean {
+  return isPlatformRole(session.role) || session.role === 'manager';
+}
+
 /** Query params arrive as strings; normalized here. */
 export interface ListConversationsFilters {
   status?: string;
@@ -123,7 +127,7 @@ export class ConversationsService {
     )[]
   > {
     const base = conversations.map((c) => this.serializeConversation(c));
-    if (!isPlatformRole(session.role) || base.length === 0) return base;
+    if (!canViewCompanyHistory(session) || base.length === 0) return base;
 
     const ownerIds = [...new Set(base.map((c) => c.userId))];
     const owners = await this.prisma.user.findMany({
@@ -205,6 +209,31 @@ export class ConversationsService {
     if (isPlatformRole(session.role)) {
       const companyId = this.assertActiveCompany(session);
 
+      const conversation = await this.chatPrisma.conversation.findUnique({
+        where: { id: conversationId },
+      });
+
+      if (
+        !conversation ||
+        conversation.companyId !== companyId ||
+        conversation.deletedAt
+      ) {
+        throw new NotFoundException('Conversation not found');
+      }
+
+      return conversation;
+    }
+
+    return this.getOwnedConversation(session, conversationId);
+  }
+
+  /** Read gate: managers and platform roles can inspect any live thread in the active company. */
+  private async getReadableConversation(
+    session: SessionData,
+    conversationId: string,
+  ): Promise<Conversation> {
+    if (canViewCompanyHistory(session)) {
+      const companyId = this.assertActiveCompany(session);
       const conversation = await this.chatPrisma.conversation.findUnique({
         where: { id: conversationId },
       });
@@ -325,7 +354,7 @@ export class ConversationsService {
         companyId,
         // Platform roles (root/admin) see every agent thread in the company;
         // everyone else stays locked to their own.
-        ...(isPlatformRole(session.role) ? {} : { userId: session.userId }),
+        ...(canViewCompanyHistory(session) ? {} : { userId: session.userId }),
         deletedAt: null,
         ...(filters.status !== undefined && filters.status !== ''
           ? { status: filters.status as ConversationStatus }
@@ -367,7 +396,7 @@ export class ConversationsService {
   }
 
   async detail(session: SessionData, conversationId: string) {
-    const conversation = await this.getAccessibleConversation(
+    const conversation = await this.getReadableConversation(
       session,
       conversationId,
     );
@@ -437,7 +466,7 @@ export class ConversationsService {
   }
 
   async listMessages(session: SessionData, conversationId: string) {
-    await this.getAccessibleConversation(session, conversationId);
+    await this.getReadableConversation(session, conversationId);
 
     const messages = await this.chatPrisma.chatMessage.findMany({
       where: { conversationId },
