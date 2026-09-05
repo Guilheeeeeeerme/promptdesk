@@ -37,7 +37,7 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
       lazyConnect: false,
     });
     this.refreshMs = Number(
-      this.config.get('MODEL_RANK_REFRESH_MS', 300_000),
+      this.config.get('MODEL_RANK_REFRESH_MS', 21_600_000),
     );
     this.topN = Number(
       this.config.get('MODEL_RANK_TOP_N', MODEL_RANK_TOP_N),
