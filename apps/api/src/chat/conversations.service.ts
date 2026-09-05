@@ -6,16 +6,24 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { ConversationStatus } from '@prisma/chat-client';
+import { ConversationStatus, MessageRole, MessageStatus } from '@prisma/chat-client';
 import type { ChatMessage, Conversation } from '@prisma/chat-client';
 import { isPlatformRole } from '../auth/session.types';
 import type { SessionData } from '../auth/session.types';
 import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
+import { CHAT_EVENTS_CHANNEL } from './chat.constants';
+import type {
+  ChatAgentMessageEvent,
+  ChatConversationUpdateEvent,
+  ChatMessageEventPayload,
+} from './chat.constants';
 import type {
   CreateConversationDto,
   UpdateConversationDto,
 } from './dto/create-chat.dto';
+import type { CreateAgentMessageDto } from './dto/create-agent-message.dto';
 
 export const FINAL_CONVERSATION_STATUSES: ConversationStatus[] = [
   ConversationStatus.solved,
@@ -69,7 +77,15 @@ export class ConversationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatPrisma: ChatPrismaService,
+    private readonly redis: RedisService,
   ) {}
+
+  private publishEvent(event: ChatAgentMessageEvent | ChatConversationUpdateEvent) {
+    void this.redis
+      .getClient()
+      .publish(CHAT_EVENTS_CHANNEL, JSON.stringify(event))
+      .catch(() => undefined);
+  }
 
   private serializeConversation(conversation: Conversation) {
     return {
@@ -88,6 +104,7 @@ export class ConversationsService {
       createdAt: conversation.createdAt,
       updatedAt: conversation.updatedAt,
       lastMessageAt: conversation.lastMessageAt,
+      resolvedAt: conversation.resolvedAt,
     };
   }
 
@@ -334,6 +351,67 @@ export class ConversationsService {
     return withOwner;
   }
 
+  /**
+   * Man-in-the-middle effectiveness panel: the past 7 days per company —
+   * resolution rate, average time to resolve and rating average bind
+   * chat → directive snapshot → status → rate.
+   */
+  async summary(session: SessionData) {
+    if (!isPlatformRole(session.role)) {
+      throw new ForbiddenException(
+        'Summary is only available to platform admins',
+      );
+    }
+    const companyId = this.assertActiveCompany(session);
+
+    const windowDays = 7;
+    const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+    const conversations = await this.chatPrisma.conversation.findMany({
+      where: { companyId, deletedAt: null, createdAt: { gte: since } },
+      select: {
+        status: true,
+        rating: true,
+        createdAt: true,
+        resolvedAt: true,
+      },
+    });
+
+    const byStatus = { open: 0, solved: 0, not_solved: 0, wont_solve: 0 };
+    const resolveDurations: number[] = [];
+    const ratings: number[] = [];
+
+    for (const c of conversations) {
+      byStatus[c.status] += 1;
+      if (isConversationFinal(c.status) && c.resolvedAt) {
+        resolveDurations.push(c.resolvedAt.getTime() - c.createdAt.getTime());
+      }
+      if (c.rating != null) ratings.push(c.rating);
+    }
+
+    const finalized = byStatus.solved + byStatus.not_solved + byStatus.wont_solve;
+    const avg = (xs: number[]) =>
+      xs.length === 0
+        ? null
+        : Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10;
+
+    return {
+      windowDays,
+      total: conversations.length,
+      open: byStatus.open,
+      solved: byStatus.solved,
+      notSolved: byStatus.not_solved,
+      wontSolve: byStatus.wont_solve,
+      resolutionRate: finalized === 0 ? null : Math.round((byStatus.solved / finalized) * 1000) / 10,
+      avgResolveSeconds:
+        resolveDurations.length === 0
+          ? null
+          : Math.round(resolveDurations.reduce((a, b) => a + b, 0) / resolveDurations.length / 1000),
+      avgRating: avg(ratings),
+      ratedCount: ratings.length,
+    };
+  }
+
   async listMessages(session: SessionData, conversationId: string) {
     await this.getAccessibleConversation(session, conversationId);
 
@@ -403,10 +481,88 @@ export class ConversationsService {
         archived: dto.archived,
         status: dto.status as ConversationStatus | undefined,
         rating: dto.rating,
+        // resolvedAt anchors resolve-time analytics: first entry into a final
+        // state stamps it, reopen clears it.
+        ...(dto.status === undefined
+          ? {}
+          : isConversationFinal(dto.status as ConversationStatus)
+            ? { resolvedAt: conversation.resolvedAt ?? new Date() }
+            : { resolvedAt: null }),
       },
     });
 
+    // Live-sync the man-in-the-middle state call to the owning agent's chat.
+    if (updated.status !== conversation.status) {
+      this.publishEvent({
+        type: 'conversation_update',
+        ownerId: conversation.userId,
+        conversationId: updated.id,
+        status: updated.status,
+        lastMessageAt: updated.lastMessageAt
+          ? updated.lastMessageAt.toISOString()
+          : null,
+      });
+    }
+
     return this.serializeConversation(updated);
+  }
+
+  /**
+   * Human in the loop: platform admins (root/admin) reply manually in any
+   * company thread. The message is stored under the thread owner's identity so
+   * the owner's transcript and isolation checks stay intact; the LLM worker
+   * folds agent messages into its context automatically.
+   */
+  async createAgentMessage(
+    session: SessionData,
+    conversationId: string,
+    dto: CreateAgentMessageDto,
+  ) {
+    if (!isPlatformRole(session.role)) {
+      throw new ForbiddenException(
+        'Only platform admins can reply manually in a conversation',
+      );
+    }
+
+    const conversation = await this.getAgentWritableConversation(
+      session,
+      conversationId,
+    );
+
+    const message = await this.chatPrisma.chatMessage.create({
+      data: {
+        companyId: conversation.companyId,
+        userId: conversation.userId,
+        conversationId: conversation.id,
+        role: MessageRole.agent,
+        content: dto.content,
+        status: MessageStatus.completed,
+      },
+    });
+
+    const now = new Date();
+    await this.chatPrisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: now },
+    });
+
+    const payload: ChatMessageEventPayload = {
+      id: message.id,
+      conversationId: message.conversationId,
+      role: message.role,
+      status: message.status,
+      content: message.content,
+      createdAt: message.createdAt.toISOString(),
+    };
+
+    this.publishEvent({
+      type: 'agent_message',
+      ownerId: conversation.userId,
+      conversationId: conversation.id,
+      message: payload,
+    });
+
+    return payload;
   }
 
   async softDelete(session: SessionData, conversationId: string) {

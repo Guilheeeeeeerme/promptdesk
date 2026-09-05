@@ -55,9 +55,13 @@ const STATUS_BADGES: Record<ConversationStatus, string> = {
   wont_solve: 'bg-slate-200 text-slate-600',
 };
 
+/** End users never see provider internals (credits, quotas, HTTP codes). */
+const ASSISTANT_FAILURE_COPY =
+  "The assistant couldn't finish this reply. You can retry, or ask a platform admin to step in manually.";
+
 interface ChatBubble {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'agent';
   content: string;
   status: MessageStatus;
   lastError?: string | null;
@@ -75,6 +79,28 @@ interface ChatMessageDto {
   model: string | null;
   conversationId: string | null;
   createdAt: string;
+}
+
+interface AgentMessageEvent {
+  type: 'agent_message';
+  ownerId: string;
+  conversationId: string;
+  message: {
+    id: string;
+    conversationId: string | null;
+    role: string;
+    status: string;
+    content: string;
+    createdAt: string;
+  };
+}
+
+interface ConversationUpdateEvent {
+  type: 'conversation_update';
+  ownerId: string;
+  conversationId: string;
+  status: string;
+  lastMessageAt: string | null;
 }
 
 interface ConversationDto {
@@ -129,12 +155,19 @@ function isTerminalJobStatus(status: MessageStatus): boolean {
   );
 }
 
-function toBubble(m: ChatMessageDto): ChatBubble {
+function toBubble(m: {
+  id: string;
+  role: string;
+  content: string;
+  status: string;
+  lastError?: string | null;
+  parentMessageId?: string | null;
+}): ChatBubble {
   return {
     id: m.id,
-    role: m.role === 'assistant' ? 'assistant' : 'user',
+    role: m.role === 'user' ? 'user' : m.role === 'agent' ? 'agent' : 'assistant',
     content: m.content,
-    status: m.status,
+    status: m.status as MessageStatus,
     lastError: m.lastError,
     parentMessageId: m.parentMessageId,
   };
@@ -162,18 +195,16 @@ export function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
+  const activeIdRef = useRef<string | null>(null);
+  const activeCompanyIdRef = useRef<string | null>(
+    session?.activeCompany?.id ?? null,
+  );
+  activeCompanyIdRef.current = session?.activeCompany?.id ?? null;
+  activeIdRef.current = activeId;
 
   const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
   const viewOnly =
     activeConversation !== null && isConversationFinal(activeConversation.status);
-
-  const disconnectSocketIfIdle = useCallback(() => {
-    if (pendingIdsRef.current.size > 0) return;
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-  }, []);
 
   const ensureSocket = useCallback(() => {
     const token = getToken();
@@ -213,15 +244,37 @@ export function ChatPage() {
 
       if (isTerminalJobStatus(event.status)) {
         pendingIdsRef.current.delete(event.assistantMessageId);
-        disconnectSocketIfIdle();
       } else if (isInFlight(event.status)) {
         pendingIdsRef.current.add(event.assistantMessageId);
       }
     });
 
+    // Human in the loop: a platform admin replied manually in this thread.
+    socket.on('agent:message', (event: AgentMessageEvent) => {
+      if (event.conversationId !== activeIdRef.current) return;
+      setMessages((prev) =>
+        prev.some((m) => m.id === event.message.id)
+          ? prev
+          : [...prev, toBubble(event.message)],
+      );
+    });
+
+    // Man-in-the-middle state calls sync live into the owner's chat.
+    socket.on('conversation:update', (event: ConversationUpdateEvent) => {
+      setConversations((prev) =>
+        prev.some((c) => c.id === event.conversationId)
+          ? prev.map((c) =>
+              c.id === event.conversationId
+                ? { ...c, status: event.status as ConversationStatus }
+                : c,
+            )
+          : prev,
+      );
+    });
+
     socketRef.current = socket;
     return socket;
-  }, [disconnectSocketIfIdle]);
+  }, []);
 
   const trackPending = useCallback(
     (assistantId: string) => {
@@ -232,6 +285,9 @@ export function ChatPage() {
   );
 
   useEffect(() => {
+    // Stay connected for the whole chat session: job streaming, manual human
+    // replies and platform state calls all arrive live.
+    ensureSocket();
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
@@ -239,7 +295,7 @@ export function ChatPage() {
       }
       pendingIdsRef.current.clear();
     };
-  }, []);
+  }, [ensureSocket]);
 
   // Search is debounced so typing does not spam the API.
   useEffect(() => {
@@ -321,7 +377,7 @@ export function ChatPage() {
         });
         await loadConversations();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Update failed');
+        setError(err instanceof Error ? err.message : "Couldn't update — try again.");
       }
     },
     [loadConversations],
@@ -339,7 +395,7 @@ export function ChatPage() {
         }
         await loadConversations();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Delete failed');
+        setError(err instanceof Error ? err.message : "Couldn't delete — try again.");
       }
     },
     [activeId, loadConversations],
@@ -417,7 +473,7 @@ export function ChatPage() {
         }
         void loadConversations().catch(() => undefined);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Send failed');
+        setError(err instanceof Error ? err.message : "Couldn't send — try again.");
         setMessages((prev) =>
           prev.filter((m) => m.id !== localUserId && m.id !== localAssistantId),
         );
@@ -438,7 +494,6 @@ export function ChatPage() {
         ),
       );
       pendingIdsRef.current.delete(assistantId);
-      disconnectSocketIfIdle();
 
       // Optimistic local bubbles have no server row yet.
       if (assistantId.startsWith('local-')) {
@@ -455,7 +510,7 @@ export function ChatPage() {
           method: 'POST',
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Stop failed');
+        setError(err instanceof Error ? err.message : "Couldn't stop — try again.");
       } finally {
         setStoppingIds((prev) => {
           const next = new Set(prev);
@@ -464,7 +519,7 @@ export function ChatPage() {
         });
       }
     },
-    [disconnectSocketIfIdle],
+    [],
   );
 
   const onRetry = useCallback(
@@ -496,8 +551,7 @@ export function ChatPage() {
         );
       } catch (err) {
         pendingIdsRef.current.delete(assistantId);
-        disconnectSocketIfIdle();
-        setError(err instanceof Error ? err.message : 'Retry failed');
+        setError(err instanceof Error ? err.message : "Couldn't retry — try again.");
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, status: 'failed' } : m,
@@ -505,7 +559,7 @@ export function ChatPage() {
         );
       }
     },
-    [trackPending, disconnectSocketIfIdle],
+    [trackPending],
   );
 
   if (loading || !session) {
@@ -792,22 +846,27 @@ export function ChatPage() {
                   <p className="text-sm text-gray-500 text-center py-8">
                     {activeId
                       ? 'No messages in this conversation yet.'
-                      : 'Enter a customer message to get started.'}
+                      : 'Type a question to get started.'}
                   </p>
                 )}
                 {messages.map((msg) => {
                   const isAssistant = msg.role === 'assistant';
+                  const isAgent = msg.role === 'agent';
                   const label = isAssistant
                     ? 'AI'
-                    : session.user.name.slice(0, 1).toUpperCase();
+                    : isAgent
+                      ? 'S'
+                      : session.user.name.slice(0, 1).toUpperCase();
 
                   return (
                     <div key={msg.id} className="flex items-end">
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${
-                          isAssistant
-                            ? 'bg-emerald-200 text-emerald-800'
-                            : 'bg-indigo-200 text-indigo-700'
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                          isAgent
+                            ? 'bg-amber-200 text-amber-800'
+                            : isAssistant
+                              ? 'bg-emerald-200 text-emerald-800'
+                              : 'bg-indigo-200 text-indigo-700'
                         }`}
                       >
                         {label}
@@ -816,9 +875,7 @@ export function ChatPage() {
                         {isInFlight(msg.status) ? (
                           <div className="space-y-2">
                             <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
-                              {msg.status === 'processing'
-                                ? 'Generating reply…'
-                                : 'Queued…'}
+                              Thinking…
                             </span>
                             <button
                               type="button"
@@ -831,8 +888,8 @@ export function ChatPage() {
                           </div>
                         ) : msg.status === 'failed' ? (
                           <div className="space-y-2">
-                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700">
-                              {msg.lastError || 'Generation failed'}
+                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700 break-words">
+                              {ASSISTANT_FAILURE_COPY}
                             </span>
                             {!viewOnly && (
                               <button
@@ -850,10 +907,12 @@ export function ChatPage() {
                           </span>
                         ) : (
                           <span
-                            className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap ${
-                              isAssistant
-                                ? 'bg-emerald-50 text-gray-800'
-                                : 'bg-gray-100 text-gray-700'
+                            className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap break-words ${
+                              isAgent
+                                ? 'bg-amber-50 text-gray-800'
+                                : isAssistant
+                                  ? 'bg-emerald-50 text-gray-800'
+                                  : 'bg-gray-100 text-gray-700'
                             }`}
                           >
                             {msg.content}
@@ -878,7 +937,7 @@ export function ChatPage() {
                 <span>
                   This conversation is{' '}
                   {STATUS_LABELS[activeConversation.status].toLowerCase()} —
-                  view-only transcript.
+                  reopen to continue.
                 </span>
                 <button
                   type="button"
@@ -909,10 +968,10 @@ export function ChatPage() {
                   disabled={viewOnly}
                   placeholder={
                     viewOnly
-                      ? 'This conversation is closed — reopen to send messages'
+                      ? 'This chat is marked as finished — reopen to continue'
                       : hasInFlight
-                        ? 'Send to cancel current reply and ask again'
-                        : 'Customer message (Shift+Enter for new line)'
+                        ? 'The assistant is thinking — send to redirect it'
+                        : 'Type your question… (Shift+Enter for new line)'
                   }
                   className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[4.5rem] disabled:bg-gray-100 disabled:text-gray-400"
                 />
@@ -921,7 +980,7 @@ export function ChatPage() {
                   disabled={sending || viewOnly || !input.trim()}
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
                 >
-                  {sending ? 'Sending…' : hasInFlight ? 'Send (take over)' : 'Send'}
+                  {sending ? 'Sending…' : hasInFlight ? 'Send' : 'Send'}
                 </button>
               </form>
             </div>
