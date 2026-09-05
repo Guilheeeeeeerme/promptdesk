@@ -193,8 +193,10 @@ export function ChatPage() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const userMenuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
@@ -402,6 +404,20 @@ export function ChatPage() {
       (previouslyFocused ?? menuButtonRef.current)?.focus?.();
     };
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setUserMenuOpen(false);
+        userMenuButtonRef.current?.focus();
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [userMenuOpen]);
 
   const patchConversation = useCallback(
     async (id: string, patch: Record<string, unknown>) => {
@@ -646,16 +662,38 @@ export function ChatPage() {
               </span>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-sm text-gray-600 hidden md:inline">
-                {session.user.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
-              >
-                Log out
-              </button>
+              <div className="relative">
+                <button
+                  ref={userMenuButtonRef}
+                  type="button"
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="menu"
+                  aria-controls="support-account-menu"
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  className="max-w-[9rem] truncate text-sm font-medium text-gray-700 hover:text-indigo-700"
+                >
+                  {session.user.name}
+                </button>
+                {userMenuOpen && (
+                  <div
+                    id="support-account-menu"
+                    role="menu"
+                    className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+                  >
+                    <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
+                      {session.user.email}
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void logout()}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Log out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
