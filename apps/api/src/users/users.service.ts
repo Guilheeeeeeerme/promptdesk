@@ -7,9 +7,9 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { SessionService } from '../auth/session.service';
 import { SessionData, SessionRole } from '../auth/session.types';
 import { PrismaService } from '../prisma/prisma.service';
-import type { RedisService } from '../redis/redis.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -35,11 +35,11 @@ const USER_VIEW = {
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly redis: RedisService,
+    private readonly sessions: SessionService,
   ) {}
 
   async list(session: SessionData): Promise<UserView[]> {
-    const companyId = this.listScope(session);
+    const companyId = this.mutationScope(session);
     const users = await this.prisma.user.findMany({
       where: { companyId },
       select: USER_VIEW,
@@ -76,29 +76,33 @@ export class UsersService {
     dto: UpdateUserDto,
   ): Promise<UserView> {
     const companyId = this.mutationScope(session);
-    const target = await this.findTarget(id, companyId);
-    this.assertCanManageTarget(session, target.role, target.id);
-
-    if (dto.role && dto.role !== target.role) {
-      if (target.id === session.userId) {
-        throw new ForbiddenException('You cannot demote yourself');
-      }
-      this.assertRoleMayCreate(session.role, dto.role);
-      await this.assertNotLastRoot(target, companyId);
-    }
 
     try {
-      const user = await this.prisma.user.update({
-        where: { id },
-        data: {
-          ...(dto.email === undefined ? {} : { email: dto.email.toLowerCase() }),
-          ...(dto.name === undefined ? {} : { name: dto.name }),
-          ...(dto.role === undefined ? {} : { role: dto.role as Role }),
-          ...(dto.password === undefined
-            ? {}
-            : { passwordHash: await bcrypt.hash(dto.password, 12) }),
-        },
-        select: { ...USER_VIEW, passwordHash: false },
+      const user = await this.prisma.$transaction(async (tx) => {
+        await this.lockCompany(tx, companyId);
+        const target = await this.findTarget(id, companyId, tx);
+        this.assertCanManageTarget(session, target.role, target.id);
+
+        if (dto.role && dto.role !== target.role) {
+          if (target.id === session.userId) {
+            throw new ForbiddenException('You cannot demote yourself');
+          }
+          this.assertRoleMayCreate(session.role, dto.role);
+          await this.assertNotLastRoot(target, companyId, tx);
+        }
+
+        return tx.user.update({
+          where: { id },
+          data: {
+            ...(dto.email === undefined ? {} : { email: dto.email.toLowerCase() }),
+            ...(dto.name === undefined ? {} : { name: dto.name }),
+            ...(dto.role === undefined ? {} : { role: dto.role as Role }),
+            ...(dto.password === undefined
+              ? {}
+              : { passwordHash: await bcrypt.hash(dto.password, 12) }),
+          },
+          select: USER_VIEW,
+        });
       });
       return this.toView(user);
     } catch (error) {
@@ -107,24 +111,19 @@ export class UsersService {
     }
   }
 
-  async remove(session: SessionData, id: string): Promise<UserView> {
+  async remove(session: SessionData, id: string): Promise<{ ok: true }> {
     const companyId = this.mutationScope(session);
-    const target = await this.findTarget(id, companyId);
-    this.assertCanManageTarget(session, target.role, target.id);
-    await this.assertNotLastRoot(target, companyId);
+    const targetId = await this.prisma.$transaction(async (tx) => {
+      await this.lockCompany(tx, companyId);
+      const target = await this.findTarget(id, companyId, tx);
+      this.assertCanManageTarget(session, target.role, target.id);
+      await this.assertNotLastRoot(target, companyId, tx);
 
-    const deleted = await this.prisma.user.delete({
-      where: { id },
+      await tx.user.delete({ where: { id } });
+      return target.id;
     });
-    await this.destroySessionsForUser(target.id);
-    return this.toView(deleted);
-  }
-
-  private listScope(session: SessionData): string {
-    if (session.role === 'agent') {
-      throw new ForbiddenException('Agents cannot manage users');
-    }
-    return session.activeCompanyId ?? '__none__';
+    await this.sessions.destroyForUser(targetId);
+    return { ok: true };
   }
 
   private mutationScope(session: SessionData): string {
@@ -137,8 +136,8 @@ export class UsersService {
     return session.activeCompanyId;
   }
 
-  private async findTarget(id: string, companyId: string) {
-    const target = await this.prisma.user.findUnique({
+  private async findTarget(id: string, companyId: string, db = this.prisma) {
+    const target = await db.user.findUnique({
       where: { id, companyId },
       select: USER_VIEW,
     });
@@ -173,9 +172,10 @@ export class UsersService {
   private async assertNotLastRoot(
     target: { role: Role },
     companyId: string,
+    db = this.prisma,
   ): Promise<void> {
     if (target.role !== Role.root) return;
-    const roots = await this.prisma.user.count({
+    const roots = await db.user.count({
       where: { role: Role.root, companyId },
     });
     if (roots <= 1) {
@@ -200,29 +200,9 @@ export class UsersService {
     }
   }
 
-  private async destroySessionsForUser(userId: string): Promise<void> {
-    const client = this.redis.getClient();
-    if (!client) return;
-    let cursor = '0';
-    do {
-      const [nextCursor, keys] = await client.scan(
-        cursor,
-        'MATCH',
-        'session:*',
-        'COUNT',
-        100,
-      );
-      cursor = nextCursor;
-      for (const key of keys) {
-        const raw = await client.get(key);
-        if (!raw) continue;
-        try {
-          const session = JSON.parse(raw) as Partial<SessionData>;
-          if (session.userId === userId) await client.del(key);
-        } catch {
-          // Ignore malformed or concurrently expired session records.
-        }
-      }
-    } while (cursor !== '0');
+  private async lockCompany(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
+    if (typeof tx.$executeRaw === 'function') {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`;
+    }
   }
 }

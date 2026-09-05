@@ -1,6 +1,9 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { validate, ValidationError } from 'class-validator';
+jest.mock('../auth/session.service', () => ({
+  SessionService: class SessionService {},
+}));
 import { SessionData } from '../auth/session.types';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -29,8 +32,9 @@ describe('UsersService authorization contracts', () => {
       delete: jest.fn(),
     },
     $transaction: jest.fn(),
+    $executeRaw: jest.fn(),
   };
-  const redis = { getClient: jest.fn() };
+  const sessions = { destroyForUser: jest.fn() };
 
   const session = (
     role: SessionData['role'],
@@ -57,8 +61,13 @@ describe('UsersService authorization contracts', () => {
   beforeEach(() => {
     Object.values(prisma.user).forEach((mock) => mock.mockReset());
     prisma.$transaction.mockReset();
-    redis.getClient.mockReset();
-    users = new UsersService(prisma as never, redis as never);
+    prisma.$executeRaw.mockReset();
+    sessions.destroyForUser.mockReset();
+    prisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(prisma),
+    );
+    prisma.$executeRaw.mockResolvedValue(0);
+    users = new UsersService(prisma as never, sessions as never);
   });
 
   describe.each([
@@ -115,8 +124,7 @@ describe('UsersService authorization contracts', () => {
 
       const result = await users.remove(actor, targetId);
 
-      expect(result).toEqual(publicUser);
-      expect(result).not.toHaveProperty('passwordHash');
+      expect(result).toEqual({ ok: true });
       expect(prisma.user.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: targetId, companyId: companyA },
@@ -125,6 +133,7 @@ describe('UsersService authorization contracts', () => {
       expect(prisma.user.delete).toHaveBeenCalledWith({
         where: { id: targetId },
       });
+      expect(sessions.destroyForUser).toHaveBeenCalledWith(targetId);
     });
   });
 
@@ -230,9 +239,9 @@ describe('UsersService authorization contracts', () => {
       prisma.user.findUnique.mockResolvedValue(persistedUser);
       prisma.user.count.mockResolvedValue(2);
       prisma.user.delete.mockResolvedValue(persistedUser);
-      await expect(users.remove(session('root'), targetId)).resolves.toEqual(
-        publicUser,
-      );
+      await expect(users.remove(session('root'), targetId)).resolves.toEqual({
+        ok: true,
+      });
       expect(prisma.user.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: targetId, companyId: companyA },
@@ -262,9 +271,8 @@ describe('UsersService authorization contracts', () => {
       prisma.user.findMany.mockResolvedValue([]);
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(users.list(noCompany)).resolves.toEqual([]);
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { companyId: '__none__' } }),
+      await expect(users.list(noCompany)).rejects.toBeInstanceOf(
+        ForbiddenException,
       );
       await expect(
         users.create(noCompany, createInput()),
