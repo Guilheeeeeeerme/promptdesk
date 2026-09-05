@@ -64,7 +64,7 @@ export function AppShell() {
                   AI Support Assistant
                 </h1>
               </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <div className="ml-4 flex flex-wrap items-center gap-x-4 gap-y-1 sm:ml-6 sm:gap-x-8">
                 {navItems.map((item) => {
                   const active = item.exact
                     ? location.pathname === item.to

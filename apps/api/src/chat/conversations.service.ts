@@ -207,7 +207,26 @@ export class ConversationsService {
         ...(pinned === undefined ? {} : { pinned }),
         ...(archived === undefined ? {} : { archived }),
         ...(filters.q
-          ? { title: { contains: filters.q, mode: 'insensitive' as const } }
+          ? {
+              OR: [
+                {
+                  title: {
+                    contains: filters.q,
+                    mode: 'insensitive' as const,
+                  },
+                },
+                {
+                  messages: {
+                    some: {
+                      content: {
+                        contains: filters.q,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  },
+                },
+              ],
+            }
           : {}),
       },
       orderBy: [

@@ -284,16 +284,17 @@ export class ChatService {
   private async resolveConversationForMessage(
     session: SessionData,
     conversationId?: string,
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; title: string | null }> {
     if (conversationId) {
       const conversation = await this.conversations.getWritableConversation(
         session,
         conversationId,
       );
-      return { id: conversation.id };
+      return { id: conversation.id, title: conversation.title };
     }
 
-    return this.conversations.create(session, {});
+    const created = await this.conversations.create(session, {});
+    return { id: created.id, title: created.title ?? null };
   }
 
   async createUserMessage(
@@ -365,9 +366,14 @@ export class ChatService {
           },
         });
 
+        const titleUpdate =
+          conversation.title && conversation.title.trim().length > 0
+            ? {}
+            : { title: dto.message.trim().slice(0, 200) };
+
         await tx.conversation.update({
           where: { id: conversation.id },
-          data: { lastMessageAt: now },
+          data: { lastMessageAt: now, ...titleUpdate },
         });
 
         return { userMessage, assistantMessage };
