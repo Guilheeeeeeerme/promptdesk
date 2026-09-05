@@ -202,6 +202,7 @@ export function ChatPage() {
   const activeCompanyIdRef = useRef<string | null>(
     session?.activeCompany?.id ?? null,
   );
+  const listGenerationRef = useRef(0);
   activeCompanyIdRef.current = session?.activeCompany?.id ?? null;
   activeIdRef.current = activeId;
 
@@ -308,6 +309,8 @@ export function ChatPage() {
 
   const loadConversations = useCallback(async () => {
     if (!session) return;
+    const generation = ++listGenerationRef.current;
+    const companyAtStart = activeCompanyIdRef.current;
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
     if (pinnedOnly) params.set('pinned', 'true');
@@ -317,11 +320,25 @@ export function ChatPage() {
     const list = await apiFetch<ConversationDto[]>(
       `/chat/conversations${qs ? `?${qs}` : ''}`,
     );
-    // Server orders by lastMessageAt; pinned float to the top client-side.
+    // Drop late responses after a company switch so Alpha never overwrites Beta.
+    if (
+      generation !== listGenerationRef.current ||
+      activeCompanyIdRef.current !== companyAtStart
+    ) {
+      return;
+    }
     setConversations(
       [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned)),
     );
   }, [session, statusFilter, pinnedOnly, showArchived, search]);
+
+  useEffect(() => {
+    listGenerationRef.current += 1;
+    setActiveId(null);
+    setMessages([]);
+    setConversations([]);
+    setError(null);
+  }, [session?.activeCompany?.id]);
 
   useEffect(() => {
     void loadConversations().catch(() => {
