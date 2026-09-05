@@ -111,8 +111,8 @@ services:
       - "${CHAT_WORKER_PORT:-3001}:3001"
     volumes:
       - ./apps/chat-worker:/apps/chat-worker
-      - ./apps/api/prisma:/apps/api/prisma:ro
-      - ./apps/api/prisma-chat:/apps/api/prisma-chat:ro
+      - ./apps/api/prisma:/apps/chat-worker/prisma-core:ro
+      - ./apps/api/prisma-chat:/apps/chat-worker/prisma-chat:ro
       - chat_worker_node_modules:/apps/chat-worker/node_modules
     networks:
       - dmz_internal
