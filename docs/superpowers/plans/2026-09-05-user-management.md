@@ -20,6 +20,10 @@
 - Password hashes and passwords are never returned by API responses.
 - Deleting a user invalidates that user's Redis sessions.
 - Reject deleting or demoting the last root user.
+- Conversation history is session-company scoped: agents see only their own
+  conversations; managers, admins, and root see all conversations in the
+  active company. History visibility does not grant platform-only write
+  actions.
 - Preserve `.playwright-mcp/` and `.serena/` as uncommitted local artifacts.
 
 ## File Map
@@ -32,6 +36,10 @@
 - Modify `apps/api/src/auth/session.service.ts`: invalidate all sessions for a user.
 - Modify `apps/api/prisma/schema.prisma` only if migration-safe constraints are required.
 - Create `apps/api/src/users/users.service.spec.ts`: service-level authorization and data tests.
+- Modify `apps/api/src/chat/conversations.service.ts`: manager-inclusive
+  company history visibility while preserving write/action guards.
+- Create or modify `apps/api/src/chat/conversations.service.spec.ts`:
+  role-scoped history and active-company isolation tests.
 - Create `apps/web/src/UsersPage.tsx`: table, create/edit forms, and delete confirmation.
 - Modify `apps/web/src/App.tsx`: `/users` route.
 - Modify `apps/web/src/AppShell.tsx`: role-aware Users sidenav item and account-menu consistency.
@@ -136,11 +144,16 @@
 
 **Files:**
 - Modify: `apps/api/src/users/users.service.spec.ts` if any uncovered authorization case is found.
+- Modify: `apps/api/src/chat/conversations.service.spec.ts` if any uncovered
+  history-scope case is found.
 - No product code changes unless a failing smoke assertion identifies a root cause.
 
 - [ ] Run API tests and build: `cd apps/api && npm test -- --runInBand && npm run build`.
 - [ ] Run web and support builds plus `git diff --check`.
 - [ ] With Playwright MCP, verify root, admin, manager, and agent flows: login, company scope, Users visibility, create/edit/delete, forbidden actions, and last-root protection.
+- [ ] Verify history scope: agents see only their own conversations; managers,
+  admins, and root see all conversations in the active company, and changing
+  the selected company changes the visible set.
 - [ ] Verify Main and Support username menus at desktop/mobile widths and logout/session invalidation.
 - [ ] Verify SSO from Main to Support after user creation and after logout.
 - [ ] Verify the corrected GitLab pipeline configuration using `glab ci lint` when credentials are available; otherwise report remote-lint as unavailable and retain local syntax/diff evidence.

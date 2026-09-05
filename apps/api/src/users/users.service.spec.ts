@@ -10,7 +10,7 @@ describe('UsersService authorization contracts', () => {
   const companyA = 'company-a';
   const companyB = 'company-b';
   const targetId = 'target-id';
-  const safeUser = {
+  const publicUser = {
     id: targetId,
     email: 'target@example.com',
     name: 'Target User',
@@ -18,6 +18,7 @@ describe('UsersService authorization contracts', () => {
     companyId: companyA,
     createdAt: new Date(),
   };
+  const persistedUser = { ...publicUser, passwordHash: 'secret-hash' };
   const prisma = {
     user: {
       findMany: jest.fn(),
@@ -75,11 +76,12 @@ describe('UsersService authorization contracts', () => {
     });
 
     it(`${role} can create an allowed user in the active company`, async () => {
-      prisma.user.create.mockResolvedValue(safeUser);
+      prisma.user.create.mockResolvedValue(persistedUser);
 
-      await expect(users.create(actor, createInput())).resolves.toEqual(
-        safeUser,
-      );
+      const result = await users.create(actor, createInput());
+
+      expect(result).toEqual(publicUser);
+      expect(result).not.toHaveProperty('passwordHash');
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ companyId: companyA }),
@@ -88,12 +90,16 @@ describe('UsersService authorization contracts', () => {
     });
 
     it(`${role} can update an allowed user in the active company`, async () => {
-      prisma.user.findUnique.mockResolvedValue(safeUser);
-      prisma.user.update.mockResolvedValue({ ...safeUser, ...updateInput });
+      prisma.user.findUnique.mockResolvedValue(persistedUser);
+      prisma.user.update.mockResolvedValue({
+        ...persistedUser,
+        ...updateInput,
+      });
 
-      await expect(users.update(actor, targetId, updateInput)).resolves.toEqual(
-        expect.objectContaining(updateInput),
-      );
+      const result = await users.update(actor, targetId, updateInput);
+
+      expect(result).toEqual({ ...publicUser, ...updateInput });
+      expect(result).not.toHaveProperty('passwordHash');
       expect(prisma.user.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: targetId, companyId: companyA },
@@ -103,11 +109,14 @@ describe('UsersService authorization contracts', () => {
     });
 
     it(`${role} can remove an allowed user in the active company`, async () => {
-      prisma.user.findUnique.mockResolvedValue(safeUser);
+      prisma.user.findUnique.mockResolvedValue(persistedUser);
       prisma.user.count.mockResolvedValue(2);
-      prisma.user.delete.mockResolvedValue(safeUser);
+      prisma.user.delete.mockResolvedValue(persistedUser);
 
-      await expect(users.remove(actor, targetId)).resolves.toEqual(safeUser);
+      const result = await users.remove(actor, targetId);
+
+      expect(result).toEqual(publicUser);
+      expect(result).not.toHaveProperty('passwordHash');
       expect(prisma.user.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: targetId, companyId: companyA },
@@ -120,7 +129,7 @@ describe('UsersService authorization contracts', () => {
   });
 
   it('denies admin create, update, and remove operations targeting roots', async () => {
-    const root = { ...safeUser, role: Role.root };
+    const root = { ...persistedUser, role: Role.root };
     prisma.user.findUnique.mockResolvedValue(root);
 
     await expect(
@@ -151,7 +160,7 @@ describe('UsersService authorization contracts', () => {
     (targetRole) => {
       beforeEach(() => {
         prisma.user.findUnique.mockResolvedValue({
-          ...safeUser,
+          ...persistedUser,
           role: targetRole,
         });
       });
@@ -183,45 +192,58 @@ describe('UsersService authorization contracts', () => {
   });
 
   describe('active-company isolation', () => {
-    it.each([
-      ['list', async () => users.list(session('root'))],
-      ['create', async () => users.create(session('root'), createInput())],
-      [
-        'update',
-        async () => users.update(session('root'), targetId, updateInput),
-      ],
-      ['remove', async () => users.remove(session('root'), targetId)],
-    ])('%s uses the active company scope', async (_operation, operation) => {
+    it('uses the active company scope for list', async () => {
       prisma.user.findMany.mockResolvedValue([]);
-      prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue(safeUser);
+      await expect(users.list(session('root'))).resolves.toEqual([]);
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { companyId: companyA } }),
+      );
+    });
 
-      await operation().catch(() => undefined);
+    it('uses the active company scope for create', async () => {
+      prisma.user.create.mockResolvedValue(persistedUser);
+      await expect(users.create(session('root'), createInput())).resolves.toEqual(
+        publicUser,
+      );
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ companyId: companyA }),
+        }),
+      );
+    });
 
-      if (_operation === 'list') {
-        expect(prisma.user.findMany).toHaveBeenCalledWith(
-          expect.objectContaining({ where: { companyId: companyA } }),
-        );
-      } else if (_operation === 'create') {
-        expect(prisma.user.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            data: expect.objectContaining({ companyId: companyA }),
-          }),
-        );
-      } else {
-        expect(prisma.user.findUnique).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: { id: targetId, companyId: companyA },
-          }),
-        );
-        expect(prisma.user.update).not.toHaveBeenCalled();
-        expect(prisma.user.delete).not.toHaveBeenCalled();
-      }
+    it('uses the active company scope for update', async () => {
+      prisma.user.findUnique.mockResolvedValue(persistedUser);
+      prisma.user.update.mockResolvedValue({ ...persistedUser, ...updateInput });
+      await expect(
+        users.update(session('root'), targetId, updateInput),
+      ).resolves.toEqual({ ...publicUser, ...updateInput });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: targetId, companyId: companyA },
+        }),
+      );
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it('uses the active company scope for remove', async () => {
+      prisma.user.findUnique.mockResolvedValue(persistedUser);
+      prisma.user.count.mockResolvedValue(2);
+      prisma.user.delete.mockResolvedValue(persistedUser);
+      await expect(users.remove(session('root'), targetId)).resolves.toEqual(
+        publicUser,
+      );
+      expect(prisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: targetId, companyId: companyA },
+        }),
+      );
+      expect(prisma.user.delete).toHaveBeenCalled();
     });
 
     it('does not mutate or delete a cross-company user', async () => {
       prisma.user.findUnique.mockResolvedValue({
-        ...safeUser,
+        ...persistedUser,
         companyId: companyB,
       });
 
@@ -260,7 +282,10 @@ describe('UsersService authorization contracts', () => {
   });
 
   it('protects the last root from deletion and demotion', async () => {
-    prisma.user.findUnique.mockResolvedValue({ ...safeUser, role: Role.root });
+    prisma.user.findUnique.mockResolvedValue({
+      ...persistedUser,
+      role: Role.root,
+    });
     prisma.user.count.mockResolvedValue(1);
 
     await expect(users.remove(session('root'), targetId)).rejects.toThrow(
@@ -273,12 +298,12 @@ describe('UsersService authorization contracts', () => {
 
   it('never exposes password hashes in service responses', async () => {
     prisma.user.findMany.mockResolvedValue([
-      { ...safeUser, passwordHash: 'secret-hash' },
+      persistedUser,
     ]);
 
     const [result] = await users.list(session('root'));
 
-    expect(result).toEqual(expect.objectContaining(safeUser));
+    expect(result).toEqual(publicUser);
     expect(result).not.toHaveProperty('passwordHash');
   });
 });

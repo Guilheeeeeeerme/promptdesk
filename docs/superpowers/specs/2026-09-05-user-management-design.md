@@ -27,6 +27,21 @@ Deleting a user invalidates that user's Redis-backed sessions. The API rejects
 deleting or demoting the last root user. Passwords are write-only: create and
 optional reset accept a password, while reads never expose password hashes.
 
+## Conversation history visibility
+
+Conversation history is scoped by both the session's active company and role:
+
+- Agents may list, inspect, and update only conversations they own.
+- Managers may list and inspect all conversations in their own company,
+  including conversations owned by other managers and agents.
+- Admins and root may list and inspect all conversations in the session's
+  selected active company.
+
+The server derives the company filter from the session and never trusts a
+client-provided company identifier. Existing write permissions remain separate
+from history visibility: managers may oversee all company threads without
+receiving platform-only actions unless explicitly authorized.
+
 ## API
 
 Create `UsersModule`, controller, service, and DTOs with:
@@ -61,6 +76,7 @@ Replace the separate visible logout button with the same account control:
 ## Verification
 
 Add API tests for company isolation, role permissions, privileged-role
-protection, last-root protection, password non-disclosure, and session
-invalidation. Run API tests and builds, then use Playwright to verify each role,
-the Users route, both account menus, SSO, logout, and responsive layouts.
+protection, last-root protection, password non-disclosure, session
+invalidation, and conversation history visibility for every role. Run API tests
+and builds, then use Playwright to verify each role, the Users route, scoped
+history, both account menus, SSO, logout, and responsive layouts.
