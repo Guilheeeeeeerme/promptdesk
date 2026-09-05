@@ -1,0 +1,52 @@
+stages:
+  - verify
+
+default:
+  image: node:22-bookworm
+  cache:
+    key:
+      files:
+        - apps/api/package-lock.json
+        - apps/chat-worker/package-lock.json
+        - apps/web/package-lock.json
+        - apps/support/package-lock.json
+    paths:
+      - apps/api/node_modules/
+      - apps/chat-worker/node_modules/
+      - apps/web/node_modules/
+      - apps/support/node_modules/
+
+api:verify:
+  stage: verify
+  script:
+    - cd apps/api
+    - npm ci --no-audit --no-fund
+    - npx prisma generate --schema prisma/schema.prisma --generator client
+    - npx prisma generate --schema prisma-chat/schema.prisma --generator client
+    - npm test -- --runInBand
+    - npm run build
+
+chat-worker:verify:
+  stage: verify
+  script:
+    - cd apps/chat-worker
+    - npm ci --no-audit --no-fund
+    - mkdir -p prisma-core prisma-chat
+    - cp ../api/prisma/schema.prisma prisma-core/schema.prisma
+    - cp ../api/prisma-chat/schema.prisma prisma-chat/schema.prisma
+    - npm run prisma:generate
+    - npm run build
+
+web:verify:
+  stage: verify
+  script:
+    - cd apps/web
+    - npm ci --no-audit --no-fund
+    - npm run build
+
+support:verify:
+  stage: verify
+  script:
+    - cd apps/support
+    - npm ci --no-audit --no-fund
+    - npm run build

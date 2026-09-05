@@ -22,6 +22,7 @@ import {
   buildPlaceholderValues,
 } from './placeholders';
 import { PrismaService } from './prisma.service';
+import { boundPromptContext } from './prompt-budget';
 
 @Processor(CHAT_GENERATE_QUEUE)
 export class ChatGenerateProcessor extends WorkerHost {
@@ -200,7 +201,7 @@ export class ChatGenerateProcessor extends WorkerHost {
         `Generating provider=${provider} model=${model} attempt=${attemptsMade}/${maxAttempts}`,
       );
 
-      const genParams = {
+      const bounded = boundPromptContext({
         guidelines,
         history: chronological.map((m) => ({
           role: (m.role === MessageRole.user ? 'user' : 'assistant') as
@@ -209,6 +210,12 @@ export class ChatGenerateProcessor extends WorkerHost {
           content: m.content,
         })),
         userMessage: userMessage.content,
+      });
+
+      const genParams = {
+        guidelines: bounded.guidelines || null,
+        history: bounded.history,
+        userMessage: bounded.userMessage,
         placeholders,
         model,
       };

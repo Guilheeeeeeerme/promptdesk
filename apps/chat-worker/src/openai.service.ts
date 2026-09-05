@@ -6,6 +6,9 @@ import {
   type PlaceholderValues,
 } from './placeholders';
 
+const PROVIDER_TIMEOUT_MS = 30_000;
+const MAX_OUTPUT_TOKENS = 1_000;
+
 @Injectable()
 export class OpenAiService {
   private readonly logger = new Logger(OpenAiService.name);
@@ -68,10 +71,14 @@ export class OpenAiService {
       },
     ];
 
-    const completion = await this.getClient().chat.completions.create({
-      model: modelName,
-      messages,
-    });
+    const completion = await this.getClient().chat.completions.create(
+      {
+        model: modelName,
+        messages,
+        max_completion_tokens: MAX_OUTPUT_TOKENS,
+      },
+      { timeout: PROVIDER_TIMEOUT_MS },
+    );
 
     const text = completion.choices[0]?.message?.content?.trim();
     if (!text) {

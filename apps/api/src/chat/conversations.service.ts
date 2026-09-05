@@ -24,6 +24,7 @@ import type {
   UpdateConversationDto,
 } from './dto/create-chat.dto';
 import type { CreateAgentMessageDto } from './dto/create-agent-message.dto';
+import { MAX_CONVERSATION_SEARCH_LENGTH } from './chat.guards';
 
 export const FINAL_CONVERSATION_STATUSES: ConversationStatus[] = [
   ConversationStatus.solved,
@@ -292,6 +293,10 @@ export class ConversationsService {
 
   async list(session: SessionData, filters: ListConversationsFilters) {
     const companyId = this.assertActiveCompany(session);
+
+    if (filters.q && filters.q.length > MAX_CONVERSATION_SEARCH_LENGTH) {
+      throw new BadRequestException('Search query is too long');
+    }
 
     if (
       filters.status !== undefined &&

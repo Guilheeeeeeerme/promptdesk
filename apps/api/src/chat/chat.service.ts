@@ -132,6 +132,7 @@ export class ChatService {
   private async cancelInFlightForUser(
     userId: string,
     companyId: string,
+    conversationId: string,
     exceptId?: string,
   ) {
     const inFlight = await this.chatPrisma.chatMessage.findMany({
@@ -140,6 +141,7 @@ export class ChatService {
         companyId,
         role: MessageRole.assistant,
         status: { in: IN_FLIGHT },
+        conversationId,
         ...(exceptId ? { id: { not: exceptId } } : {}),
       },
     });
@@ -187,6 +189,36 @@ export class ChatService {
         jobId: `chat-gen:${data.assistantMessageId}:${provider}`,
       },
     );
+  }
+
+  private async markEnqueueFailure(
+    assistantMessageId: string,
+    userId: string,
+    userMessageId: string,
+    provider: 'gemini' | 'openai',
+  ) {
+    const failed = await this.chatPrisma.chatMessage.updateMany({
+      where: {
+        id: assistantMessageId,
+        status: MessageStatus.pending,
+      },
+      data: {
+        status: MessageStatus.failed,
+        lastError: 'The assistant job could not be queued',
+        provider,
+      },
+    });
+
+    if (failed.count > 0) {
+      await this.publishEvent({
+        userId,
+        assistantMessageId,
+        userMessageId,
+        status: 'failed',
+        error: 'The assistant job could not be queued',
+        provider,
+      });
+    }
   }
 
   /**
@@ -338,7 +370,11 @@ export class ChatService {
       );
 
       // Takeover: cancel any in-flight assistant generations for this stream.
-      await this.cancelInFlightForUser(session.userId, companyId);
+      await this.cancelInFlightForUser(
+        session.userId,
+        companyId,
+        conversation.id,
+      );
 
       const now = new Date();
       const result = await this.chatPrisma.$transaction(async (tx) => {
@@ -379,14 +415,24 @@ export class ChatService {
         return { userMessage, assistantMessage };
       });
 
-      await this.enqueueGenerate({
-        assistantMessageId: result.assistantMessage.id,
-        userMessageId: result.userMessage.id,
-        companyId,
-        userId: session.userId,
-        conversationId: conversation.id,
-        provider: 'gemini',
-      });
+      try {
+        await this.enqueueGenerate({
+          assistantMessageId: result.assistantMessage.id,
+          userMessageId: result.userMessage.id,
+          companyId,
+          userId: session.userId,
+          conversationId: conversation.id,
+          provider: 'gemini',
+        });
+      } catch (enqueueError) {
+        await this.markEnqueueFailure(
+          result.assistantMessage.id,
+          session.userId,
+          result.userMessage.id,
+          'gemini',
+        );
+        throw enqueueError;
+      }
 
       const response = {
         status: 'pending' as const,
@@ -466,12 +512,29 @@ export class ChatService {
     await this.setAbortFlag(message.id);
     await this.removeQueueJobsForMessage(message.id);
 
-    const updated = await this.chatPrisma.chatMessage.update({
-      where: { id: message.id },
+    const updatedRows = await this.chatPrisma.chatMessage.updateMany({
+      where: {
+        id: message.id,
+        status: { in: [MessageStatus.pending, MessageStatus.processing] },
+      },
       data: {
         status: MessageStatus.cancelled,
         lastError: null,
       },
+    });
+
+    if (updatedRows.count === 0) {
+      const current = await this.chatPrisma.chatMessage.findUniqueOrThrow({
+        where: { id: message.id },
+      });
+      return {
+        status: current.status,
+        assistantMessage: this.serializeMessage(current),
+      };
+    }
+
+    const updated = await this.chatPrisma.chatMessage.findUniqueOrThrow({
+      where: { id: message.id },
     });
 
     await this.publishEvent({

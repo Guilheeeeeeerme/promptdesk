@@ -6,6 +6,9 @@ import {
   type PlaceholderValues,
 } from './placeholders';
 
+const PROVIDER_TIMEOUT_MS = 30_000;
+const MAX_OUTPUT_TOKENS = 1_000;
+
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
@@ -36,7 +39,10 @@ export class GeminiService {
     model?: string;
   }): Promise<string> {
     const modelName = this.getModelName(params.model);
-    const model = this.client.getGenerativeModel({ model: modelName });
+    const model = this.client.getGenerativeModel({
+      model: modelName,
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+    });
 
     const systemParts = [
       'You are an AI support assistant. Draft a helpful reply the agent can send to the customer.',
@@ -64,7 +70,9 @@ export class GeminiService {
       .filter(Boolean)
       .join('\n\n');
 
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(prompt, {
+      timeout: PROVIDER_TIMEOUT_MS,
+    });
     const text = result.response.text()?.trim();
     if (!text) {
       this.logger.warn(`Gemini ${modelName} returned empty text`);

@@ -9,6 +9,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { MAX_CHAT_MESSAGE_LENGTH } from '../chat.guards';
 
 export const CONVERSATION_STATUSES = [
   'open',
@@ -60,6 +61,7 @@ export class UpdateConversationDto {
 export class CreateChatDto {
   @IsString()
   @MinLength(1)
+  @MaxLength(MAX_CHAT_MESSAGE_LENGTH)
   message!: string;
 
   @IsOptional()

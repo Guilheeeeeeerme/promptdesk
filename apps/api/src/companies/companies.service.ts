@@ -2,14 +2,18 @@ import { createHash } from 'crypto';
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionData, isPlatformRole } from '../auth/session.types';
+import { RedisService } from '../redis/redis.service';
 
 const MAX_GUIDELINE_BYTES = 10 * 1024 * 1024; // 10MB, matches boilerplate
+const GUIDELINE_UPLOAD_LIMIT = 10;
 
 export type CompanyListItem = {
   id: string;
@@ -51,7 +55,23 @@ export class CompaniesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatPrisma: ChatPrismaService,
+    private readonly redis: RedisService,
   ) {}
+
+  private async enforceUploadRateLimit(
+    session: SessionData,
+    companyId: string,
+  ): Promise<void> {
+    const key = `guideline:upload:${companyId}:${session.userId}`;
+    const count = await this.redis.getClient().incr(key);
+    if (count === 1) await this.redis.getClient().expire(key, 60);
+    if (count > GUIDELINE_UPLOAD_LIMIT) {
+      throw new HttpException(
+        'Too many guideline uploads — wait a moment and try again',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
 
   private async messageCountFor(companyId: string): Promise<number> {
     return this.chatPrisma.chatMessage.count({ where: { companyId } });
@@ -159,25 +179,50 @@ export class CompaniesService {
     const guideline = file ? this.parseGuidelineFile(file) : null;
 
     try {
-      const company = await this.prisma.company.create({
-        data: {
-          name: trimmed,
-          ...(guideline
-            ? {
-                guidelineText: guideline.text,
-                guidelineFileName: guideline.fileName,
-                guidelineUpdatedAt: new Date(),
-              }
-            : {}),
-        },
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          guidelineFileName: true,
-          guidelineUpdatedAt: true,
-          guidelineText: true,
-        },
+      const company = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.company.create({
+          data: {
+            name: trimmed,
+            ...(guideline
+              ? {
+                  guidelineText: guideline.text,
+                  guidelineFileName: guideline.fileName,
+                  guidelineUpdatedAt: new Date(),
+                }
+              : {}),
+          },
+        });
+
+        if (guideline) {
+          const version = await tx.guidelineVersion.create({
+            data: {
+              companyId: created.id,
+              version: 1,
+              content: guideline.text,
+              fileName: guideline.fileName,
+              ...hashGuidelineContent(guideline.text),
+              createdById: session.userId,
+            },
+          });
+
+          await tx.company.update({
+            where: { id: created.id },
+            data: { currentGuidelineVersionId: version.id },
+          });
+        }
+
+        return tx.company.findUniqueOrThrow({
+          where: { id: created.id },
+          select: {
+            id: true,
+            name: true,
+            createdAt: true,
+            guidelineFileName: true,
+            guidelineUpdatedAt: true,
+            guidelineText: true,
+            currentGuidelineVersion: { select: { version: true } },
+          },
+        });
       });
 
       return {
@@ -186,7 +231,7 @@ export class CompaniesService {
         createdAt: company.createdAt,
         guidelineFileName: company.guidelineFileName,
         guidelineUpdatedAt: company.guidelineUpdatedAt,
-        currentVersion: null,
+        currentVersion: company.currentGuidelineVersion?.version ?? null,
         hasGuidelines: Boolean(company.guidelineText),
         messageCount: 0,
       };
@@ -209,6 +254,7 @@ export class CompaniesService {
     file: Express.Multer.File,
   ) {
     await this.assertCanManage(session, companyId);
+    await this.enforceUploadRateLimit(session, companyId);
     const guideline = this.parseGuidelineFile(file);
 
     const company = await this.prisma.$transaction(async (tx) => {

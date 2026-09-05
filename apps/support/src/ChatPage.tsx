@@ -226,7 +226,6 @@ export function ChatPage() {
     const socket = io(getApiOrigin(), {
       path: getSocketPath(),
       auth: { token },
-      query: { token },
       transports: ['websocket', 'polling'],
     });
 
