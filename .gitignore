@@ -107,6 +107,7 @@ apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
 
 # ---- Local AI / agent tooling (Prisma composer scaffolds, etc.) ----
+.worktrees/
 .claude/
 .agents/
 .devin/
