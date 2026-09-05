@@ -107,6 +107,7 @@ apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
 
 # ---- Local AI / agent tooling (Prisma composer scaffolds, etc.) ----
+.worktrees/
 .claude/
 .agents/
 .devin/
@@ -119,3 +120,10 @@ apps/support/dist/
 apps/support/.env
 apps/support/.env.*
 !apps/support/.env.example
+
+# ---- Chat worker ----
+apps/chat-worker/dist/
+apps/chat-worker/.env
+apps/chat-worker/.env.*
+!apps/chat-worker/.env.example
+apps/chat-worker/*.tsbuildinfo

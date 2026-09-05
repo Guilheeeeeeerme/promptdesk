@@ -1,89 +1,617 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { apiFetch, getApiOrigin, getSocketPath, getToken, MAIN_ORIGIN } from './api';
+import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
 import { useAuth } from './auth';
+
+type MessageStatus =
+  | 'completed'
+  | 'pending'
+  | 'processing'
+  | 'failed'
+  | 'cancelled';
+
+type ConversationStatus =
+  | 'open'
+  | 'solved'
+  | 'not_solved'
+  | 'wont_solve';
+
+/** Agents (owners) may pick only these; wont_solve is a platform decision. */
+const CONVERSATION_STATUSES: ConversationStatus[] = [
+  'open',
+  'solved',
+  'not_solved',
+];
+
+const ALL_CONVERSATION_STATUSES: ConversationStatus[] = [
+  'open',
+  'solved',
+  'not_solved',
+  'wont_solve',
+];
+
+/** solved / not_solved / wont_solve are final: view-only transcript until reopened. */
+const FINAL_STATUSES: ConversationStatus[] = [
+  'solved',
+  'not_solved',
+  'wont_solve',
+];
+
+function isConversationFinal(status: ConversationStatus): boolean {
+  return FINAL_STATUSES.includes(status);
+}
+
+const STATUS_LABELS: Record<ConversationStatus, string> = {
+  open: 'Open',
+  solved: 'Solved',
+  not_solved: 'Not solved',
+  wont_solve: "Won't solve",
+};
+
+const STATUS_BADGES: Record<ConversationStatus, string> = {
+  open: 'bg-gray-100 text-gray-700',
+  solved: 'bg-emerald-100 text-emerald-700',
+  not_solved: 'bg-rose-100 text-rose-700',
+  wont_solve: 'bg-slate-200 text-slate-600',
+};
+
+/** End users never see provider internals (credits, quotas, HTTP codes). */
+const ASSISTANT_FAILURE_COPY =
+  "The assistant couldn't finish this reply. You can retry, or ask a platform admin to step in manually.";
 
 interface ChatBubble {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'agent';
   content: string;
+  status: MessageStatus;
+  lastError?: string | null;
+  parentMessageId?: string | null;
+}
+
+interface ChatMessageDto {
+  id: string;
+  content: string;
+  role: string;
+  status: MessageStatus;
+  parentMessageId: string | null;
+  attemptCount: number;
+  lastError: string | null;
+  model: string | null;
+  conversationId: string | null;
+  createdAt: string;
+}
+
+interface AgentMessageEvent {
+  type: 'agent_message';
+  ownerId: string;
+  conversationId: string;
+  message: {
+    id: string;
+    conversationId: string | null;
+    role: string;
+    status: string;
+    content: string;
+    createdAt: string;
+  };
+}
+
+interface ConversationUpdateEvent {
+  type: 'conversation_update';
+  ownerId: string;
+  conversationId: string;
+  status: string;
+  lastMessageAt: string | null;
+}
+
+interface ConversationDto {
+  id: string;
+  title: string | null;
+  pinned: boolean;
+  archived: boolean;
+  status: ConversationStatus;
+  rating: number | null;
+  guidelineSnapshotHash: string | null;
+  lastMessageAt: string | null;
+  createdAt: string;
 }
 
 interface ChatResponse {
   status: string;
   reply: null;
-  message: {
-    id: string;
-    content: string;
-    role: string;
-    createdAt: string;
+  message: ChatMessageDto;
+  assistantMessage: ChatMessageDto;
+  conversationId: string;
+}
+
+interface RetryResponse {
+  status: string;
+  assistantMessage: ChatMessageDto;
+}
+
+interface StopResponse {
+  status: string;
+  assistantMessage: ChatMessageDto;
+}
+
+interface JobUpdateEvent {
+  userId: string;
+  assistantMessageId: string;
+  userMessageId: string;
+  status: MessageStatus;
+  content?: string;
+  error?: string;
+  model?: string;
+}
+
+function isInFlight(status: MessageStatus): boolean {
+  return status === 'pending' || status === 'processing';
+}
+
+function isTerminalJobStatus(status: MessageStatus): boolean {
+  return (
+    status === 'completed' ||
+    status === 'failed' ||
+    status === 'cancelled'
+  );
+}
+
+function toBubble(m: {
+  id: string;
+  role: string;
+  content: string;
+  status: string;
+  lastError?: string | null;
+  parentMessageId?: string | null;
+}): ChatBubble {
+  return {
+    id: m.id,
+    role: m.role === 'user' ? 'user' : m.role === 'agent' ? 'agent' : 'assistant',
+    content: m.content,
+    status: m.status as MessageStatus,
+    lastError: m.lastError,
+    parentMessageId: m.parentMessageId,
   };
+}
+
+function formatWhen(value: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString();
 }
 
 export function ChatPage() {
   const { session, loading, logout } = useAuth();
+  const [conversations, setConversations] = useState<ConversationDto[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatBubble[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const userMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const socketRef = useRef<Socket | null>(null);
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  const activeIdRef = useRef<string | null>(null);
+  const activeCompanyIdRef = useRef<string | null>(
+    session?.activeCompany?.id ?? null,
+  );
+  const listGenerationRef = useRef(0);
+  activeCompanyIdRef.current = session?.activeCompany?.id ?? null;
+  activeIdRef.current = activeId;
 
-  useEffect(() => {
-    if (!session) return;
+  const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
+  const viewOnly =
+    activeConversation !== null && isConversationFinal(activeConversation.status);
 
+  const ensureSocket = useCallback(() => {
     const token = getToken();
-    if (!token) return;
+    if (!token) return null;
+
+    if (socketRef.current?.connected) {
+      return socketRef.current;
+    }
+
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
 
     const socket = io(getApiOrigin(), {
       path: getSocketPath(),
       auth: { token },
-      query: { token },
       transports: ['websocket', 'polling'],
     });
+
+    socket.on('job:update', (event: JobUpdateEvent) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== event.assistantMessageId) return m;
+          return {
+            ...m,
+            status: event.status,
+            content:
+              event.status === 'completed'
+                ? (event.content ?? m.content)
+                : m.content,
+            lastError: event.status === 'failed' ? (event.error ?? m.lastError) : null,
+          };
+        }),
+      );
+
+      if (isTerminalJobStatus(event.status)) {
+        pendingIdsRef.current.delete(event.assistantMessageId);
+      } else if (isInFlight(event.status)) {
+        pendingIdsRef.current.add(event.assistantMessageId);
+      }
+    });
+
+    // Human in the loop: a platform admin replied manually in this thread.
+    socket.on('agent:message', (event: AgentMessageEvent) => {
+      if (event.conversationId !== activeIdRef.current) return;
+      setMessages((prev) =>
+        prev.some((m) => m.id === event.message.id)
+          ? prev
+          : [...prev, toBubble(event.message)],
+      );
+    });
+
+    // Man-in-the-middle state calls sync live into the owner's chat.
+    socket.on('conversation:update', (event: ConversationUpdateEvent) => {
+      setConversations((prev) =>
+        prev.some((c) => c.id === event.conversationId)
+          ? prev.map((c) =>
+              c.id === event.conversationId
+                ? { ...c, status: event.status as ConversationStatus }
+                : c,
+            )
+          : prev,
+      );
+    });
+
     socketRef.current = socket;
+    return socket;
+  }, []);
+
+  const trackPending = useCallback(
+    (assistantId: string) => {
+      pendingIdsRef.current.add(assistantId);
+      ensureSocket();
+    },
+    [ensureSocket],
+  );
+
+  useEffect(() => {
+    // Stay connected for the whole chat session: job streaming, manual human
+    // replies and platform state calls all arrive live.
+    ensureSocket();
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      pendingIdsRef.current.clear();
+    };
+  }, [ensureSocket]);
+
+  // Search is debounced so typing does not spam the API.
+  useEffect(() => {
+    const id = window.setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  const loadConversations = useCallback(async () => {
+    if (!session) return;
+    const generation = ++listGenerationRef.current;
+    const companyAtStart = activeCompanyIdRef.current;
+    const params = new URLSearchParams();
+    if (statusFilter) params.set('status', statusFilter);
+    if (pinnedOnly) params.set('pinned', 'true');
+    params.set('archived', showArchived ? 'true' : 'false');
+    if (search) params.set('q', search);
+    const qs = params.toString();
+    const list = await apiFetch<ConversationDto[]>(
+      `/chat/conversations${qs ? `?${qs}` : ''}`,
+    );
+    // Drop late responses after a company switch so Alpha never overwrites Beta.
+    if (
+      generation !== listGenerationRef.current ||
+      activeCompanyIdRef.current !== companyAtStart
+    ) {
+      return;
+    }
+    setConversations(
+      [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned)),
+    );
+  }, [session, statusFilter, pinnedOnly, showArchived, search]);
+
+  useEffect(() => {
+    listGenerationRef.current += 1;
+    setActiveId(null);
+    setMessages([]);
+    setConversations([]);
+    setError(null);
+  }, [session?.activeCompany?.id]);
+
+  useEffect(() => {
+    void loadConversations().catch(() => {
+      // Sidebar is optional; the composer still works without it.
+    });
+  }, [loadConversations, session?.activeCompany?.id]);
+
+  useEffect(() => {
+    if (!session || !activeId) {
+      setMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const history = await apiFetch<ChatMessageDto[]>(
+          `/chat/conversations/${activeId}/messages`,
+        );
+        if (cancelled) return;
+        const bubbles = history.map(toBubble);
+        setMessages(bubbles);
+
+        const pending = bubbles.filter(
+          (m) => m.role === 'assistant' && isInFlight(m.status),
+        );
+        if (pending.length > 0) {
+          for (const m of pending) {
+            pendingIdsRef.current.add(m.id);
+          }
+          ensureSocket();
+        }
+      } catch {
+        if (!cancelled) {
+          setMessages([]);
+        }
+      }
+    })();
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      cancelled = true;
     };
-  }, [session]);
+  }, [session, activeId, ensureSocket]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSidebarOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusable = sidebarRef.current?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      (previouslyFocused ?? menuButtonRef.current)?.focus?.();
+    };
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setUserMenuOpen(false);
+        userMenuButtonRef.current?.focus();
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [userMenuOpen]);
+
+  const patchConversation = useCallback(
+    async (id: string, patch: Record<string, unknown>) => {
+      setError(null);
+      try {
+        await apiFetch<ConversationDto>(`/chat/conversations/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        });
+        await loadConversations();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't update — try again.");
+      }
+    },
+    [loadConversations],
+  );
+
+  const onDelete = useCallback(
+    async (id: string) => {
+      setError(null);
+      if (!window.confirm('Delete this conversation?')) return;
+      try {
+        await apiFetch(`/chat/conversations/${id}`, { method: 'DELETE' });
+        if (id === activeId) {
+          setActiveId(null);
+          setMessages([]);
+        }
+        await loadConversations();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't delete — try again.");
+      }
+    },
+    [activeId, loadConversations],
+  );
+
   const onSend = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
       const content = input.trim();
-      if (!content || sending) return;
+      if (!content || sending || viewOnly) return;
 
       setError(null);
       setSending(true);
       setInput('');
-      const localId = `local-${Date.now()}`;
-      setMessages((prev) => [...prev, { id: localId, role: 'user', content }]);
+
+      // Optimistic takeover: mark local in-flight assistants cancelled.
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.role === 'assistant' && isInFlight(m.status)
+            ? { ...m, status: 'cancelled' as const }
+            : m,
+        ),
+      );
+      for (const id of [...pendingIdsRef.current]) {
+        pendingIdsRef.current.delete(id);
+      }
+
+      const localUserId = `local-user-${Date.now()}`;
+      const localAssistantId = `local-assistant-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        { id: localUserId, role: 'user', content, status: 'completed' },
+        {
+          id: localAssistantId,
+          role: 'assistant',
+          content: '',
+          status: 'pending',
+        },
+      ]);
 
       try {
         const result = await apiFetch<ChatResponse>('/chat', {
           method: 'POST',
-          body: JSON.stringify({ message: content }),
+          body: JSON.stringify({
+            message: content,
+            idempotencyKey: crypto.randomUUID(),
+            ...(activeId ? { conversationId: activeId } : {}),
+          }),
         });
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === localId ? { ...m, id: result.message.id } : m,
-          ),
+          prev.map((m) => {
+            if (m.id === localUserId) {
+              return {
+                ...m,
+                id: result.message.id,
+                status: result.message.status,
+              };
+            }
+            if (m.id === localAssistantId) {
+              return {
+                ...m,
+                id: result.assistantMessage.id,
+                status: result.assistantMessage.status,
+                parentMessageId: result.assistantMessage.parentMessageId,
+              };
+            }
+            return m;
+          }),
         );
-        socketRef.current?.emit('chat', { message: content });
+        trackPending(result.assistantMessage.id);
+
+        if (result.conversationId !== activeId) {
+          // Fresh conversation was created server-side; select it.
+          setActiveId(result.conversationId);
+        }
+        void loadConversations().catch(() => undefined);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Send failed');
-        setMessages((prev) => prev.filter((m) => m.id !== localId));
+        setError(err instanceof Error ? err.message : "Couldn't send — try again.");
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== localUserId && m.id !== localAssistantId),
+        );
       } finally {
         setSending(false);
       }
     },
-    [input, sending],
+    [input, sending, viewOnly, activeId, trackPending, loadConversations],
+  );
+
+  const onStop = useCallback(
+    async (assistantId: string) => {
+      setError(null);
+      setStoppingIds((prev) => new Set(prev).add(assistantId));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, status: 'cancelled' as const } : m,
+        ),
+      );
+      pendingIdsRef.current.delete(assistantId);
+
+      // Optimistic local bubbles have no server row yet.
+      if (assistantId.startsWith('local-')) {
+        setStoppingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(assistantId);
+          return next;
+        });
+        return;
+      }
+
+      try {
+        await apiFetch<StopResponse>(`/chat/messages/${assistantId}/stop`, {
+          method: 'POST',
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't stop — try again.");
+      } finally {
+        setStoppingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(assistantId);
+          return next;
+        });
+      }
+    },
+    [],
+  );
+
+  const onRetry = useCallback(
+    async (assistantId: string) => {
+      setError(null);
+      try {
+        trackPending(assistantId);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, status: 'pending', lastError: null, content: '' }
+              : m,
+          ),
+        );
+        const result = await apiFetch<RetryResponse>(
+          `/chat/messages/${assistantId}/retry`,
+          { method: 'POST' },
+        );
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  status: result.assistantMessage.status,
+                  lastError: result.assistantMessage.lastError,
+                }
+              : m,
+          ),
+        );
+      } catch (err) {
+        pendingIdsRef.current.delete(assistantId);
+        setError(err instanceof Error ? err.message : "Couldn't retry — try again.");
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, status: 'failed' } : m,
+          ),
+        );
+      }
+    },
+    [trackPending],
   );
 
   if (loading || !session) {
@@ -95,109 +623,496 @@ export function ChatPage() {
   }
 
   const companyName = session.activeCompany?.name ?? 'No company';
+  const hasInFlight = messages.some(
+    (m) => m.role === 'assistant' && isInFlight(m.status),
+  );
+
+  function closeSidebar() {
+    setSidebarOpen(false);
+  }
+
+  function openSidebar() {
+    setSidebarOpen(true);
+  }
+
+  function startNewChat() {
+    setActiveId(null);
+    setMessages([]);
+    setError(null);
+    closeSidebar();
+  }
+
+  function selectConversation(id: string) {
+    setActiveId(id);
+    setError(null);
+    closeSidebar();
+  }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <nav className="bg-white shadow-sm sticky top-0 z-10">
+    <div className="min-h-dvh flex flex-col bg-gray-50 overflow-x-hidden">
+      <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-8">
-              <h1 className="text-xl font-bold text-indigo-600">
+          <div className="flex justify-between h-14 sm:h-16 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-indigo-600 truncate">
                 AI Support Assistant
               </h1>
-              <span className="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+              <span className="hidden sm:inline-flex border-indigo-500 text-gray-900 items-center px-1 pt-1 border-b-2 text-sm font-medium">
                 Chat
               </span>
-              <a
-                href={MAIN_ORIGIN}
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-              >
-                Main app
-              </a>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 hidden sm:inline">
-                {session.user.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
-              >
-                Log out
-              </button>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="relative">
+                <button
+                  ref={userMenuButtonRef}
+                  type="button"
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="menu"
+                  aria-controls="support-account-menu"
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  className="max-w-[9rem] truncate text-sm font-medium text-gray-700 hover:text-indigo-700"
+                >
+                  {session.user.name}
+                </button>
+                {userMenuOpen && (
+                  <div
+                    id="support-account-menu"
+                    role="menu"
+                    className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+                  >
+                    <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
+                      {session.user.email}
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void logout()}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Log out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Support Chat</h1>
+      <main className="flex-1 flex flex-col min-h-0 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
+        <div className="mb-3 sm:mb-4 shrink-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+            Support Chat
+          </h1>
           <p className="mt-1 text-sm text-gray-600">
             Recommend replies using your company guidelines
           </p>
         </div>
 
-        <div className="bg-white shadow rounded-lg flex flex-col h-[600px]">
-          <div className="px-4 py-3 border-b border-gray-200">
-            <div className="flex items-center">
-              <div className="bg-indigo-100 rounded-full h-10 w-10 flex items-center justify-center text-indigo-600 font-semibold">
-                {companyName.slice(0, 1).toUpperCase()}
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">{companyName}</p>
-                <p className="text-xs text-gray-500">Active company</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 p-4 overflow-y-auto">
-            <div className="flex flex-col space-y-4">
-              {messages.length === 0 && (
-                <p className="text-sm text-gray-500 text-center py-8">
-                  Enter a customer message to get started.
-                </p>
-              )}
-              {messages.map((msg) => (
-                <div key={msg.id} className="flex items-end">
-                  <div className="w-8 h-8 rounded-full bg-indigo-200 flex items-center justify-center text-xs text-indigo-700">
-                    {session.user.name.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="flex flex-col space-y-2 text-sm max-w-xl mx-2 items-start">
-                    <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-700 whitespace-pre-wrap">
-                      {msg.content}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              <div ref={bottomRef} />
-            </div>
-          </div>
-
-          {error && (
-            <div className="px-4 py-2 text-sm text-red-600 border-t border-red-50 bg-red-50">
-              {error}
-            </div>
+        <div className="relative flex-1 flex gap-4 min-h-0 h-[min(40rem,calc(100dvh-9.5rem))] sm:h-[min(42rem,calc(100dvh-10.5rem))]">
+          {sidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close conversations menu"
+              className="fixed inset-0 z-40 bg-gray-900/40 md:hidden"
+              onClick={closeSidebar}
+            />
           )}
 
-          <div className="border-t border-gray-200 px-4 py-3">
-            <form className="flex items-center" onSubmit={onSend}>
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Customer message"
-                className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm"
-              />
+          <aside
+            ref={sidebarRef}
+            id="conversations-drawer"
+            aria-label="Conversations"
+            className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:static md:z-auto md:w-72 md:shrink-0 md:translate-x-0 md:shadow md:rounded-lg ${
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+            }`}
+          >
+            <div className="px-3 pt-3 flex items-center justify-between gap-2 md:hidden">
+              <p className="text-sm font-semibold text-gray-900">Conversations</p>
               <button
-                type="submit"
-                disabled={sending || !input.trim()}
-                className="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                type="button"
+                onClick={closeSidebar}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
+                aria-label="Close conversations menu"
               >
-                {sending ? 'Sending…' : 'Send'}
+                Close
               </button>
-            </form>
+            </div>
+            <div className="px-3 pt-3">
+              <button
+                type="button"
+                onClick={startNewChat}
+                className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                New chat
+              </button>
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search chats…"
+                className="mt-3 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="flex-1 min-w-0 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
+                  >
+                    <option value="">All statuses</option>
+                    {ALL_CONVERSATION_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABELS[s]}
+                      </option>
+                    ))}
+                  </select>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-xs text-gray-600">
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={pinnedOnly}
+                    onChange={(e) => setPinnedOnly(e.target.checked)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  Pinned
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  Archived
+                </label>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto border-t border-gray-200 min-h-0">
+              {conversations.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-6 px-3">
+                  No conversations yet.
+                </p>
+              )}
+              <ul className="divide-y divide-gray-100">
+                {conversations.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectConversation(c.id)}
+                      className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${
+                        c.id === activeId ? 'bg-indigo-50' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-gray-900 truncate">
+                          {c.title || 'Untitled chat'}
+                        </span>
+                        {c.pinned && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-600 shrink-0">
+                            Pinned
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_BADGES[c.status]}`}
+                        >
+                          {STATUS_LABELS[c.status]}
+                        </span>
+                        <span className="text-[10px] text-gray-400 truncate">
+                          {formatWhen(c.lastMessageAt ?? c.createdAt)}
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+
+          <div className="flex-1 bg-white shadow rounded-lg flex flex-col min-w-0 min-h-0 w-full">
+            <div className="px-3 sm:px-4 py-3 border-b border-gray-200 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center min-w-0 gap-2">
+                  <button
+                    ref={menuButtonRef}
+                    type="button"
+                    className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 shrink-0"
+                    aria-label="Open conversations menu"
+                    aria-expanded={sidebarOpen}
+                    aria-controls="conversations-drawer"
+                    onClick={openSidebar}
+                  >
+                    <span aria-hidden="true" className="block w-4 space-y-1">
+                      <span className="block h-px bg-current" />
+                      <span className="block h-px bg-current" />
+                      <span className="block h-px bg-current" />
+                    </span>
+                  </button>
+                  <div className="bg-indigo-100 rounded-full h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center text-indigo-600 font-semibold shrink-0">
+                    {companyName.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {activeConversation?.title || 'New chat'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{companyName}</p>
+                  </div>
+                </div>
+                {activeConversation && (
+                  <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 shrink-0 max-w-[55%]">
+                    <select
+                      value={activeConversation.status}
+                      onChange={(e) =>
+                        void patchConversation(activeConversation.id, {
+                          status: e.target.value,
+                        })
+                      }
+                      className="rounded-md border border-gray-300 px-2 py-1 text-xs bg-white focus:border-indigo-500 focus:ring-indigo-500 max-w-full"
+                    >
+                      {!CONVERSATION_STATUSES.includes(
+                        activeConversation.status,
+                      ) && (
+                        <option value={activeConversation.status} disabled>
+                          {STATUS_LABELS[activeConversation.status]} (platform)
+                        </option>
+                      )}
+                      {CONVERSATION_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s === 'open' && isConversationFinal(activeConversation.status)
+                            ? 'Reopen'
+                            : STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void patchConversation(activeConversation.id, {
+                          pinned: !activeConversation.pinned,
+                        })
+                      }
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      {activeConversation.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void patchConversation(activeConversation.id, {
+                          archived: !activeConversation.archived,
+                        })
+                      }
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      {activeConversation.archived ? 'Unarchive' : 'Archive'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDelete(activeConversation.id)}
+                      className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+              {activeConversation && (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  {isConversationFinal(activeConversation.status) ? (
+                    <div
+                      className="flex items-center gap-1"
+                      role="group"
+                      aria-label="Rate this conversation"
+                    >
+                      <span className="text-[10px] text-gray-400 mr-1">
+                        Rate
+                      </span>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          title={`Rate ${star} star${star > 1 ? 's' : ''}${
+                            activeConversation.rating === star ? ' (clear)' : ''
+                          }`}
+                          onClick={() =>
+                            void patchConversation(activeConversation.id, {
+                              rating:
+                                activeConversation.rating === star ? null : star,
+                            })
+                          }
+                          className={`text-lg leading-none ${
+                            (activeConversation.rating ?? 0) >= star
+                              ? 'text-yellow-500'
+                              : 'text-gray-300 hover:text-yellow-400'
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-gray-400">
+                      Rate once the chat is solved / not solved
+                    </span>
+                  )}
+                  <span className="text-[10px] text-gray-400 truncate">
+                    {activeConversation.guidelineSnapshotHash
+                      ? `Guidance bound: ${activeConversation.guidelineSnapshotHash.slice(0, 12)}…`
+                      : 'No guidance bound'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 p-3 sm:p-4 overflow-y-auto min-h-0">
+              <div className="flex flex-col space-y-4">
+                {messages.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-8">
+                    {activeId
+                      ? 'No messages in this conversation yet.'
+                      : 'Type a question to get started.'}
+                  </p>
+                )}
+                {messages.map((msg) => {
+                  const isAssistant = msg.role === 'assistant';
+                  const isAgent = msg.role === 'agent';
+                  const label = isAssistant
+                    ? 'AI'
+                    : isAgent
+                      ? 'S'
+                      : session.user.name.slice(0, 1).toUpperCase();
+
+                  return (
+                    <div key={msg.id} className="flex items-end">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                          isAgent
+                            ? 'bg-amber-200 text-amber-800'
+                            : isAssistant
+                              ? 'bg-emerald-200 text-emerald-800'
+                              : 'bg-indigo-200 text-indigo-700'
+                        }`}
+                      >
+                        {label}
+                      </div>
+                      <div className="flex flex-col space-y-2 text-sm max-w-[min(36rem,calc(100%-2.5rem))] mx-2 items-start min-w-0">
+                        {isInFlight(msg.status) ? (
+                          <div className="space-y-2">
+                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
+                              Thinking…
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void onStop(msg.id)}
+                              disabled={stoppingIds.has(msg.id)}
+                              className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-60"
+                            >
+                              {stoppingIds.has(msg.id) ? 'Stopping…' : 'Stop'}
+                            </button>
+                          </div>
+                        ) : msg.status === 'failed' ? (
+                          <div className="space-y-2">
+                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700 break-words">
+                              {ASSISTANT_FAILURE_COPY}
+                            </span>
+                            {!viewOnly && (
+                              <button
+                                type="button"
+                                onClick={() => void onRetry(msg.id)}
+                                className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                              >
+                                Retry
+                              </button>
+                            )}
+                          </div>
+                        ) : msg.status === 'cancelled' ? (
+                          <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-50 text-gray-400 italic">
+                            Stopped
+                          </span>
+                        ) : (
+                          <span
+                            className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap break-words ${
+                              isAgent
+                                ? 'bg-amber-50 text-gray-800'
+                                : isAssistant
+                                  ? 'bg-emerald-50 text-gray-800'
+                                  : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {msg.content}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={bottomRef} />
+              </div>
+            </div>
+
+            {error && (
+              <div className="px-4 py-2 text-sm text-red-600 border-t border-red-50 bg-red-50 shrink-0 break-words">
+                {error}
+              </div>
+            )}
+
+            {viewOnly && activeConversation && (
+              <div className="px-3 sm:px-4 py-2 text-sm text-amber-800 bg-amber-50 border-t border-amber-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <span>
+                  This conversation is{' '}
+                  {STATUS_LABELS[activeConversation.status].toLowerCase()} —
+                  reopen to continue.
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void patchConversation(activeConversation.id, {
+                      status: 'open',
+                    })
+                  }
+                  className="text-xs font-semibold text-amber-900 underline hover:no-underline shrink-0"
+                >
+                  Reopen
+                </button>
+              </div>
+            )}
+
+            <div className="border-t border-gray-200 px-3 sm:px-4 py-3 shrink-0">
+              <form
+                className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3"
+                onSubmit={onSend}
+              >
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  rows={2}
+                  disabled={viewOnly}
+                  placeholder={
+                    viewOnly
+                      ? 'This chat is marked as finished — reopen to continue'
+                      : hasInFlight
+                        ? 'The assistant is thinking — send to redirect it'
+                        : 'Type your question… (Shift+Enter for new line)'
+                  }
+                  className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[3rem] max-h-[8rem] disabled:bg-gray-100 disabled:text-gray-400 w-full"
+                />
+                <button
+                  type="submit"
+                  disabled={sending || viewOnly || !input.trim()}
+                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shrink-0 w-full sm:w-auto"
+                >
+                  {sending ? 'Sending…' : hasInFlight ? 'Send' : 'Send'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </main>

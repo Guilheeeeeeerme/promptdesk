@@ -84,4 +84,33 @@ export class SessionService {
   async destroy(token: string): Promise<void> {
     await this.redis.getClient().del(this.key(token));
   }
+
+  async destroyForUser(userId: string): Promise<void> {
+    const client = this.redis.getClient();
+    let cursor = '0';
+
+    do {
+      const [nextCursor, keys] = await client.scan(
+        cursor,
+        'MATCH',
+        'session:*',
+        'COUNT',
+        100,
+      );
+      cursor = nextCursor;
+
+      for (const key of keys) {
+        const raw = await client.get(key);
+        if (!raw) continue;
+        try {
+          const session = JSON.parse(raw) as Partial<SessionData>;
+          if (session.userId === userId) {
+            await client.del(key);
+          }
+        } catch {
+          // Ignore malformed or concurrently expired session records.
+        }
+      }
+    } while (cursor !== '0');
+  }
 }

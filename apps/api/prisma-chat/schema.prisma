@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/chat-client"
+}
+
+generator chatWorker {
+  provider = "prisma-client-js"
+  output   = "../../chat-worker/node_modules/@prisma/chat-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CHAT_DATABASE_URL")
+}
+
+enum MessageRole {
+  user
+  assistant
+  /// Manual human reply from a platform admin (man in the middle).
+  agent
+}
+
+enum MessageStatus {
+  completed
+  pending
+  processing
+  failed
+  cancelled
+}
+
+/// Exactly four states. solved / not_solved / wont_solve are FINAL: the
+/// conversation becomes a view-only transcript and messaging is blocked
+/// (POST /chat → 409). Agents (owners) may only pick solved / not_solved and
+/// reopen to open. Platform roles (root/admin) may pick any state and are the
+/// man in the middle: they see every company thread and can reply manually.
+enum ConversationStatus {
+  open
+  solved
+  not_solved
+  wont_solve
+}
+
+/// Chat-scoped customer. companyId / createdById soft-ref core DB (no cross-DB FK).
+model Customer {
+  id          String        @id @default(cuid())
+  companyId   String
+  displayName String
+  email       String?
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  messages    ChatMessage[]
+
+  @@index([companyId, createdById, updatedAt])
+}
+
+// Sibling hooks: `provider` present; `MessageStatus.cancelled` used by stop/abort
+// (Redis key chat:abort:{assistantMessageId}). Keep cancelled if schema moves.
+model ChatMessage {
+  id              String        @id @default(cuid())
+  companyId       String
+  userId          String
+  customerId      String?
+  customer        Customer?     @relation(fields: [customerId], references: [id])
+  conversation    Conversation? @relation(fields: [conversationId], references: [id])
+  conversationId  String?
+  role            MessageRole
+  content         String
+  status          MessageStatus @default(completed)
+  parentMessageId String?
+  attemptCount    Int           @default(0)
+  lastError       String?
+  model           String?
+  /// AI provider id (e.g. gemini | openai). Owned by provider sibling.
+  provider        String?
+  createdAt       DateTime      @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([userId, status])
+  @@index([customerId])
+  @@index([conversationId, createdAt])
+}
+
+/// companyId / userId / guidelineVersionId soft-ref core DB (no cross-DB FK).
+model Conversation {
+  id                    String             @id @default(cuid())
+  companyId             String
+  userId                String
+  customerId            String?
+  title                 String?
+  pinned                Boolean            @default(false)
+  archived              Boolean            @default(false)
+  deletedAt             DateTime?
+  status                ConversationStatus @default(open)
+  /// Set when the thread first reaches a final state (solved / not_solved /
+  /// wont_solve); cleared on reopen. Powers resolve-time analytics.
+  resolvedAt            DateTime?
+  /// Stars 1..5; single scheme. Writable only while the thread is final.
+  rating                Int?
+  /// Soft-ref core DB. Holds a sha256 content token (same scheme as the
+  /// GuidelineVersion.contentHash in the guideline-versions sibling).
+  guidelineVersionId    String?
+  /// Sticky guidance: snapshot bound once at conversation start. The worker
+  /// reads ONLY this; live guideline changes never affect in-flight chats.
+  guidelineSnapshot     String?
+  /// sha256 hex of guidelineSnapshot.
+  guidelineSnapshotHash String?
+  guidelineBoundAt      DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  lastMessageAt         DateTime?
+  messages              ChatMessage[]
+
+  @@index([companyId, userId, lastMessageAt])
+  @@index([companyId, status])
+}

@@ -9,8 +9,28 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - dmz_internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-support} -d ${POSTGRES_DB:-support}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-chat:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_CHAT_USER:-support}
+      POSTGRES_PASSWORD: ${POSTGRES_CHAT_PASSWORD:-support}
+      POSTGRES_DB: ${POSTGRES_CHAT_DB:-support_chat}
+    volumes:
+      - postgres_chat_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - dmz_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CHAT_USER:-support} -d ${POSTGRES_CHAT_DB:-support_chat}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,6 +39,8 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    networks:
+      - dmz_internal
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -32,51 +54,151 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      CHAT_DATABASE_URL: ${CHAT_DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-86400}
       CORS_ORIGIN: ${CORS_ORIGIN}
       PORT: ${PORT:-3000}
+      CHAT_JOB_ATTEMPTS: ${CHAT_JOB_ATTEMPTS:-3}
+      CHAT_RATE_LIMIT_PER_MINUTE: ${CHAT_RATE_LIMIT_PER_MINUTE:-20}
     ports:
       - "${PORT:-3000}:3000"
     volumes:
       - ./apps/api:/app
+      - api_node_modules:/app/node_modules
+    networks:
+      - dmz_internal
     command:
       - sh
       - -c
       - |
         set -e
-        npx prisma migrate deploy
+        npm install --no-audit --no-fund --no-save
+        # Host builds leave a stale tsbuildinfo that makes incremental watch
+        # skip recompiles; start each dev session from a clean slate.
+        rm -f tsconfig.build.tsbuildinfo
+        for schema in prisma/schema.prisma prisma-chat/schema.prisma; do
+          if [ -f "$$schema" ]; then
+            npx prisma generate --schema "$$schema"
+            npx prisma migrate deploy --schema "$$schema"
+          fi
+        done
         npx prisma db seed
-        node dist/main.js
+        npm run start:dev
     depends_on:
       postgres:
+        condition: service_healthy
+      postgres-chat:
         condition: service_healthy
       redis:
         condition: service_healthy
 
-  web:
-    build:
-      context: ./apps/web
-      args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
-        VITE_SUPPORT_ORIGIN: ${VITE_SUPPORT_ORIGIN:-http://localhost:8081}
-        VITE_SSO_RETURN_ORIGINS: ${SSO_RETURN_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081}
+  chat-worker:
+    image: node:22-bookworm
+    working_dir: /apps/chat-worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      CHAT_DATABASE_URL: ${CHAT_DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-nano}
+      CHAT_JOB_ATTEMPTS: ${CHAT_JOB_ATTEMPTS:-3}
+      MODEL_RANK_REFRESH_MS: ${MODEL_RANK_REFRESH_MS:-21600000}
+      MODEL_RANK_TOP_N: ${MODEL_RANK_TOP_N:-3}
+      CHAT_WORKER_PORT: ${CHAT_WORKER_PORT:-3001}
     ports:
-      - "8080:80"
+      - "${CHAT_WORKER_PORT:-3001}:3001"
+    volumes:
+      - ./apps/chat-worker:/apps/chat-worker
+      - ./apps/api/prisma:/apps/chat-worker/prisma-core:ro
+      - ./apps/api/prisma-chat:/apps/chat-worker/prisma-chat:ro
+      - chat_worker_node_modules:/apps/chat-worker/node_modules
+    networks:
+      - dmz_internal
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npm install --no-audit --no-fund --no-save
+        npm run prisma:generate
+        npm run start:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-chat:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  web:
+    image: node:22-bookworm
+    working_dir: /app
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-/api}
+      VITE_SUPPORT_ORIGIN: ${VITE_SUPPORT_ORIGIN:-http://localhost:8081}
+      VITE_SSO_RETURN_ORIGINS: ${SSO_RETURN_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081}
+      VITE_API_PROXY_TARGET: http://api:3000
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./apps/web:/app
+      - ./apps/shared:/shared:ro
+      - web_node_modules:/app/node_modules
+    networks:
+      - dmz_internal
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npm install --no-audit --no-fund --no-save
+        npm run dev
     depends_on:
       - api
 
   support:
-    build:
-      context: ./apps/support
-      args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
-        VITE_MAIN_ORIGIN: ${VITE_MAIN_ORIGIN:-http://localhost:8080}
+    image: node:22-bookworm
+    working_dir: /app
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-/api}
+      VITE_MAIN_ORIGIN: ${VITE_MAIN_ORIGIN:-http://localhost:8080}
+      VITE_API_PROXY_TARGET: http://api:3000
     ports:
-      - "8081:80"
+      - "8081:8081"
+    volumes:
+      - ./apps/support:/app
+      - ./apps/shared:/shared:ro
+      - support_node_modules:/app/node_modules
+    networks:
+      - dmz_internal
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npm install --no-audit --no-fund --no-save
+        npm run dev
     depends_on:
       - api
       - web
 
 volumes:
   postgres_data:
+  postgres_chat_data:
+  api_node_modules:
+  chat_worker_node_modules:
+  web_node_modules:
+  support_node_modules:
+
+networks:
+  # Internal service mesh (api ↔ chat-worker ↔ redis ↔ postgres*).
+  # Public edge ports stay published for host/browser; S2S traffic stays on this network.
+  dmz_internal:
+    name: dmz_internal
