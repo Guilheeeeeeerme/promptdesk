@@ -12,14 +12,17 @@ import {
 
 export const CONVERSATION_STATUSES = [
   'open',
-  'in_progress',
   'solved',
   'not_solved',
+  'wont_solve',
 ] as const;
 
 export type ConversationStatusDto = (typeof CONVERSATION_STATUSES)[number];
 
-/** solved / not_solved are final (view-only); reopen via PATCH status. */
+/** Agents (owners) may pick only these; wont_solve is platform-only. */
+export const AGENT_STATUSES = ['open', 'solved', 'not_solved'] as const;
+
+export type AgentStatusDto = (typeof AGENT_STATUSES)[number];
 export class CreateConversationDto {
   @IsOptional()
   @IsString()
