@@ -50,7 +50,7 @@ Shared client helpers live in [`apps/shared/auth`](apps/shared/auth) (token stor
 
 1. `POST /chat` cancels any in-flight assistant jobs for that user+company (takeover), persists the **user** message and a **pending** assistant placeholder, then enqueues a BullMQ job (default **3** attempts).
 2. Support MFE opens Socket.IO **only while** jobs are pending/processing; joins room via session user id.
-3. Worker always prefers **Gemini**: BullMQ attempts walk Redis `models:rank:gemini` (cheapest top-3, refreshed every `MODEL_RANK_REFRESH_MS`, default 5m). `GEMINI_API_KEY` is required. Abort flag `chat:abort:{assistantMessageId}` is checked before/after the LLM call; aborted jobs never write completed content.
+3. Worker always prefers **Gemini**: BullMQ attempts walk Redis `models:rank:gemini` (cheapest top-3, refreshed every `MODEL_RANK_REFRESH_MS`, default 6 hours). `GEMINI_API_KEY` is required. Abort flag `chat:abort:{assistantMessageId}` is checked before/after the LLM call; aborted jobs never write completed content.
 4. If all Gemini attempts fail **and** `OPENAI_API_KEY` is set, worker re-enqueues `provider=openai` and walks `models:rank:openai`. Without OpenAI key, job fails. Next message starts on Gemini again.
 5. Worker publishes `chat:events`; API emits `job:update` to the user room (`completed` | `failed` | `cancelled` | `processing`).
 6. **Stop** → `POST /chat/messages/:id/stop` marks `cancelled`, sets abort flag, removes queued BullMQ jobs.
@@ -200,7 +200,7 @@ Groups pre-conversation `ChatMessage` rows (`conversationId` null) into one "Imp
 cd apps/api && npm run backfill:conversations
 ```
 
-Env (see `.env.example`): `DATABASE_URL` (core), `CHAT_DATABASE_URL` (chat), **required** `GEMINI_API_KEY`, optional `OPENAI_API_KEY` (failover only), `CHAT_JOB_ATTEMPTS` (default `3`), `CHAT_RATE_LIMIT_PER_MINUTE` (default `20`), `MODEL_RANK_REFRESH_MS` (default `300000`). Redis keys: `models:rank:gemini`, `models:rank:openai`, `models:rank:updatedAt`, `chat:idem:{companyId}:{userId}:{key}`.
+Env (see `.env.example`): `DATABASE_URL` (core), `CHAT_DATABASE_URL` (chat), **required** `GEMINI_API_KEY`, optional `OPENAI_API_KEY` (failover only), `CHAT_JOB_ATTEMPTS` (default `3`), `CHAT_RATE_LIMIT_PER_MINUTE` (default `20`), `MODEL_RANK_REFRESH_MS` (default `21600000`, 6 hours). Redis keys: `models:rank:gemini`, `models:rank:openai`, `models:rank:updatedAt`, `chat:idem:{companyId}:{userId}:{key}`.
 
 ## Manual test plan
 
