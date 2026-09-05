@@ -12,6 +12,7 @@ import { SessionService } from '../auth/session.service';
 import { ConfigService } from '@nestjs/config';
 import {
   CHAT_EVENTS_CHANNEL,
+  type ChatChannelEvent,
   type ChatJobEvent,
 } from './chat.constants';
 
@@ -52,9 +53,19 @@ export class ChatGateway
     this.subscriber.on('message', (channel, raw) => {
       if (channel !== CHAT_EVENTS_CHANNEL) return;
       try {
-        const event = JSON.parse(raw) as ChatJobEvent;
+        const event = JSON.parse(raw) as ChatChannelEvent;
+        if ('type' in event && event.type === 'agent_message') {
+          this.server.to(`user:${event.ownerId}`).emit('agent:message', event);
+          return;
+        }
+        if ('type' in event && event.type === 'conversation_update') {
+          this.server
+            .to(`user:${event.ownerId}`)
+            .emit('conversation:update', event);
+          return;
+        }
         this.server
-          .to(`user:${event.userId}`)
+          .to(`user:${(event as ChatJobEvent).userId}`)
           .emit('job:update', event);
       } catch (err) {
         this.logger.warn(`Invalid chat event payload: ${String(err)}`);

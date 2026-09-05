@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import { isPlatformRole } from '@shared/auth';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
@@ -48,6 +54,19 @@ interface ChatMessageDto {
   conversationId: string | null;
 }
 
+interface SummaryDto {
+  windowDays: number;
+  total: number;
+  open: number;
+  solved: number;
+  notSolved: number;
+  wontSolve: number;
+  resolutionRate: number | null;
+  avgResolveSeconds: number | null;
+  avgRating: number | null;
+  ratedCount: number;
+}
+
 const STATUS_LABELS: Record<ConversationStatus, string> = {
   open: 'Open',
   solved: 'Solved',
@@ -61,6 +80,40 @@ function statusLabel(status: ConversationStatus): string {
 
 function isFinal(status: ConversationStatus): boolean {
   return FINAL_STATUSES.includes(status);
+}
+
+function humanizeSeconds(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function messageIdentity(role: string): {
+  label: string;
+  bubbleClass: string;
+  avatarClass: string;
+} {
+  if (role === 'agent') {
+    return {
+      label: 'Support (human)',
+      bubbleClass: 'bg-amber-50 text-gray-800',
+      avatarClass: 'bg-amber-200 text-amber-800',
+    };
+  }
+  if (role === 'assistant') {
+    return {
+      label: 'AI',
+      bubbleClass: 'bg-indigo-50 text-gray-900',
+      avatarClass: 'bg-indigo-200 text-indigo-700',
+    };
+  }
+  return {
+    label: 'Customer',
+    bubbleClass: 'bg-gray-50 text-gray-900',
+    avatarClass: 'bg-gray-200 text-gray-600',
+  };
 }
 
 function formatWhen(value: string | null): string {
@@ -87,6 +140,9 @@ export function HistoryPage() {
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<SummaryDto | null>(null);
+  const [reply, setReply] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
@@ -145,6 +201,25 @@ export function HistoryPage() {
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  useEffect(() => {
+    if (!isPlatform || !companyId) {
+      setSummary(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await apiFetch<SummaryDto>('/chat/conversations/summary');
+        if (!cancelled) setSummary(data);
+      } catch {
+        if (!cancelled) setSummary(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isPlatform, companyId, loadList]);
 
   useEffect(() => {
     if (!activeSelectedId || !companyId) {
@@ -217,6 +292,33 @@ export function HistoryPage() {
     [loadList],
   );
 
+  const sendReply = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault();
+      const content = reply.trim();
+      if (!content || !activeSelectedId || sendingReply) return;
+
+      setError(null);
+      setSendingReply(true);
+      try {
+        const message = await apiFetch<ChatMessageDto>(
+          `/chat/conversations/${activeSelectedId}/messages`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ content }),
+          },
+        );
+        setMessages((prev) => [...prev, message]);
+        setReply('');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Reply failed');
+      } finally {
+        setSendingReply(false);
+      }
+    },
+    [reply, activeSelectedId, sendingReply],
+  );
+
   function selectConversation(id: string) {
     setSelectedId(id);
     setSelectedForCompanyId(companyId);
@@ -259,6 +361,59 @@ export function HistoryPage() {
           />
         </div>
       </div>
+
+      {isPlatform && summary && (
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="bg-white shadow rounded-lg px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Threads · {summary.windowDays}d
+            </p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
+              {summary.total}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {summary.open} still open
+            </p>
+          </div>
+          <div className="bg-white shadow rounded-lg px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Resolution rate
+            </p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
+              {summary.resolutionRate != null ? `${summary.resolutionRate}%` : '—'}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {summary.solved} solved · {summary.notSolved} not ·{' '}
+              {summary.wontSolve} won't
+            </p>
+          </div>
+          <div className="bg-white shadow rounded-lg px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Avg time to resolve
+            </p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
+              {summary.avgResolveSeconds != null
+                ? humanizeSeconds(summary.avgResolveSeconds)
+                : '—'}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              first finish → open timestamp
+            </p>
+          </div>
+          <div className="bg-white shadow rounded-lg px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Rating average
+            </p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
+              {summary.avgRating != null ? `${summary.avgRating} / 5` : '—'}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {summary.ratedCount} conversation
+              {summary.ratedCount === 1 ? '' : 's'} rated
+            </p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div
@@ -432,28 +587,68 @@ export function HistoryPage() {
                 {messages.length === 0 ? (
                   <p className="text-sm text-gray-500">No messages.</p>
                 ) : (
-                  messages.map((msg) => (
-                    <article
-                      key={msg.id}
-                      className={`rounded-md px-3 py-2 text-sm whitespace-pre-wrap break-words ${
-                        msg.role === 'assistant'
-                          ? 'bg-indigo-50 text-gray-900'
-                          : 'bg-gray-50 text-gray-900'
-                      }`}
-                    >
-                      <header className="mb-1 flex items-center justify-between gap-2 text-xs text-gray-500">
-                        <span className="font-medium capitalize">
-                          {msg.role === 'assistant' ? 'Guidance' : 'Customer'}
-                        </span>
-                        <time className="shrink-0">
-                          {formatWhen(msg.createdAt)}
-                        </time>
-                      </header>
-                      <p>{msg.content || '(pending)'}</p>
-                    </article>
-                  ))
+                  messages.map((msg) => {
+                    const identity = messageIdentity(msg.role);
+                    return (
+                      <article
+                        key={msg.id}
+                        className={`rounded-md px-3 py-2 text-sm whitespace-pre-wrap break-words ${identity.bubbleClass}`}
+                      >
+                        <header className="mb-1 flex items-center justify-between gap-2 text-xs text-gray-500">
+                          <span className="font-medium">{identity.label}</span>
+                          <time className="shrink-0">
+                            {formatWhen(msg.createdAt)}
+                          </time>
+                        </header>
+                        <p>{msg.content || '(pending)'}</p>
+                      </article>
+                    );
+                  })
                 )}
               </div>
+
+              {isPlatform && (
+                <div className="border-t border-gray-100 pt-4">
+                  {isFinal(detail.status) ? (
+                    <p className="text-xs text-gray-400">
+                      Reopen the conversation to reply manually.
+                    </p>
+                  ) : (
+                    <form
+                      className="flex flex-col gap-2"
+                      onSubmit={sendReply}
+                    >
+                      <label
+                        htmlFor="manual-reply"
+                        className="text-xs font-medium text-gray-500"
+                      >
+                        Reply as support human (visible to the agent's chat)
+                      </label>
+                      <textarea
+                        id="manual-reply"
+                        value={reply}
+                        onChange={(e) => setReply(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            e.currentTarget.form?.requestSubmit();
+                          }
+                        }}
+                        rows={2}
+                        placeholder="Type a manual reply… (Shift+Enter for new line)"
+                        className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 resize-y min-h-[2.5rem] max-h-[8rem] w-full"
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingReply || !reply.trim()}
+                        className="self-start inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        {sendingReply ? 'Sending…' : 'Send reply'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
             </div>
           ) : null}
         </section>

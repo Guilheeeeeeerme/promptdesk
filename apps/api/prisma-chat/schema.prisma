@@ -16,6 +16,8 @@ datasource db {
 enum MessageRole {
   user
   assistant
+  /// Manual human reply from a platform admin (man in the middle).
+  agent
 }
 
 enum MessageStatus {
@@ -90,7 +92,10 @@ model Conversation {
   archived              Boolean            @default(false)
   deletedAt             DateTime?
   status                ConversationStatus @default(open)
-  /// Stars 1..5; single scheme.
+  /// Set when the thread first reaches a final state (solved / not_solved /
+  /// wont_solve); cleared on reopen. Powers resolve-time analytics.
+  resolvedAt            DateTime?
+  /// Stars 1..5; single scheme. Writable only while the thread is final.
   rating                Int?
   /// Soft-ref core DB. Holds a sha256 content token (same scheme as the
   /// GuidelineVersion.contentHash in the guideline-versions sibling).

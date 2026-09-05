@@ -50,3 +50,36 @@ export type ChatJobEvent = {
   model?: string;
   provider?: ChatProvider;
 };
+
+/** Serialized ChatMessage as delivered over the events channel. */
+export type ChatMessageEventPayload = {
+  id: string;
+  conversationId: string | null;
+  role: string;
+  status: string;
+  content: string;
+  createdAt: string;
+};
+
+/** Manual human reply published by a platform admin. */
+export type ChatAgentMessageEvent = {
+  type: 'agent_message';
+  ownerId: string;
+  conversationId: string;
+  message: ChatMessageEventPayload;
+};
+
+/** Status change made by the platform man in the middle. */
+export type ChatConversationUpdateEvent = {
+  type: 'conversation_update';
+  ownerId: string;
+  conversationId: string;
+  status: string;
+  lastMessageAt: string | null;
+};
+
+/** Anything published on CHAT_EVENTS_CHANNEL. Legacy job events omit type. */
+export type ChatChannelEvent =
+  | ChatAgentMessageEvent
+  | ChatConversationUpdateEvent
+  | ChatJobEvent;
