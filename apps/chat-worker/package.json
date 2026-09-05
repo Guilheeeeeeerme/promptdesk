@@ -8,7 +8,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "prisma:generate": "prisma generate --schema ../api/prisma/schema.prisma && prisma generate --schema ../api/prisma-chat/schema.prisma"
+    "prisma:generate": "prisma generate --schema prisma-core/schema.prisma && prisma generate --schema prisma-chat/schema.prisma"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
