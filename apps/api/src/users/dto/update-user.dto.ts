@@ -8,7 +8,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Role } from '@prisma/client';
-import { SessionRole } from '../../auth/session.types';
+import type { SessionRole } from '../../auth/session.types';
 
 export class UpdateUserDto {
   @IsOptional()
