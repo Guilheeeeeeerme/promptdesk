@@ -232,8 +232,10 @@ export function CompaniesPage() {
                                 )
                               }
                             />
-                            <label
-                              htmlFor={`guideline-upload-${company.id}`}
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => fileInputs.current[company.id]?.click()}
                               className={`inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer ${
                                 busy ? 'opacity-60 pointer-events-none' : ''
                               }`}
@@ -245,7 +247,7 @@ export function CompaniesPage() {
                               {company.hasGuidelines
                                 ? 'Replace Guidelines'
                                 : 'Upload Guidelines'}
-                            </label>
+                            </button>
                             {company.hasGuidelines && (
                               <button
                                 type="button"

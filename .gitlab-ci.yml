@@ -4,12 +4,7 @@ stages:
 default:
   image: node:22-bookworm
   cache:
-    key:
-      files:
-        - apps/api/package-lock.json
-        - apps/chat-worker/package-lock.json
-        - apps/web/package-lock.json
-        - apps/support/package-lock.json
+    key: "deps-$CI_COMMIT_REF_SLUG"
     paths:
       - apps/api/node_modules/
       - apps/chat-worker/node_modules/

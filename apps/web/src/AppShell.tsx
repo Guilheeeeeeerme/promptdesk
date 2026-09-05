@@ -50,6 +50,7 @@ export function AppShell() {
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
 
@@ -73,6 +74,15 @@ export function AppShell() {
       (previouslyFocused ?? menuButtonRef.current)?.focus?.();
     };
   }, [navOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setUserMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [userMenuOpen]);
 
   if (loading) {
     return (
@@ -117,7 +127,67 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-gray-50 overflow-x-hidden">
+    <div className="min-h-dvh flex bg-gray-50 overflow-x-hidden">
+      <aside className="hidden md:flex md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 bg-white border-r border-gray-200 flex-col">
+        <div className="px-6 py-6 border-b border-gray-100">
+          <h1 className="text-xl font-bold text-indigo-600 leading-tight">
+            AI Support Assistant
+          </h1>
+        </div>
+        {canSwitchCompany && (
+          <div className="px-4 py-5 border-b border-gray-100">
+            <label
+              htmlFor="company-switcher"
+              className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
+            >
+              Company
+            </label>
+            <select
+              id="company-switcher"
+              disabled={switching}
+              value={session.activeCompany?.id ?? ''}
+              onChange={onCompanyChange}
+              className="w-full rounded-md border-gray-300 shadow-sm text-sm py-2 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+            >
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {!canSwitchCompany && (
+          <div className="px-4 py-5 border-b border-gray-100">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              Company
+            </span>
+            <span className="block truncate text-sm font-medium text-gray-900">
+              {session.activeCompany?.name ?? 'No company'}
+            </span>
+          </div>
+        )}
+        <nav aria-label="Main navigation" className="flex-1 px-3 py-5 space-y-1">
+          {navItems.map((item) => {
+            const active = isActive(item);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex items-center rounded-md px-3 py-2.5 text-sm font-medium ${
+                  active
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <div className="min-w-0 flex-1 flex flex-col">
       <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14 sm:h-16 gap-3">
@@ -137,73 +207,51 @@ export function AppShell() {
                   <span className="block h-px bg-current" />
                 </span>
               </button>
-              <h1 className="text-lg sm:text-xl font-bold text-indigo-600 truncate">
+              <h1 className="md:hidden text-lg sm:text-xl font-bold text-indigo-600 truncate">
                 AI Support Assistant
               </h1>
-              <div className="ml-2 hidden md:flex flex-wrap items-center gap-x-6 gap-y-1 lg:ml-6 lg:gap-x-8">
-                {navItems.map((item) => {
-                  const active = isActive(item);
-                  return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={
-                        active
-                          ? 'border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
-                          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
-                      }
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-                <a
-                  href={supportHref()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={openSupport}
-                  aria-label="Chat (opens in new tab)"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center gap-1 px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  Chat
-                  <ExternalLinkIcon className="size-3.5 shrink-0" />
-                </a>
-              </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-              {canSwitchCompany && (
-                <div className="hidden sm:flex items-center gap-2">
-                  <label
-                    htmlFor="company-switcher"
-                    className="text-sm text-gray-500 hidden lg:inline"
-                  >
-                    Company
-                  </label>
-                  <select
-                    id="company-switcher"
-                    disabled={switching}
-                    value={session.activeCompany?.id ?? ''}
-                    onChange={onCompanyChange}
-                    className="rounded-md border-gray-300 shadow-sm text-sm py-1.5 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 max-w-[10rem] lg:max-w-none"
-                  >
-                    {companies.map((company) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <span className="text-sm text-gray-600 hidden lg:inline">
-                {session.user.name} ({session.user.role})
-              </span>
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+              <a
+                href={supportHref()}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={openSupport}
+                aria-label="Chat (opens in new tab)"
+                className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-700"
               >
-                Log out
-              </button>
+                Chat
+                <ExternalLinkIcon className="size-3.5 shrink-0" />
+              </a>
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="menu"
+                    onClick={() => setUserMenuOpen((open) => !open)}
+                    className="max-w-[9rem] truncate text-sm font-medium text-gray-700 hover:text-indigo-700"
+                  >
+                    {session.user.name}
+                  </button>
+                  {userMenuOpen && (
+                    <div
+                      role="menu"
+                      className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+                    >
+                      <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
+                        {session.user.email}
+                      </div>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => void logout()}
+                        className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Log out
+                      </button>
+                    </div>
+                  )}
+                </div>
             </div>
           </div>
         </div>
@@ -289,6 +337,16 @@ export function AppShell() {
             </select>
           </div>
         )}
+        {!canSwitchCompany && (
+          <div className="border-t border-gray-100 px-4 py-3 sm:hidden">
+            <span className="block text-xs font-medium text-gray-500 mb-1">
+              Company
+            </span>
+            <span className="block truncate text-sm font-medium text-gray-900">
+              {session.activeCompany?.name ?? 'No company'}
+            </span>
+          </div>
+        )}
         <div className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
           {session.user.name} ({session.user.role})
         </div>
@@ -303,6 +361,7 @@ export function AppShell() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
         <Outlet />
       </main>
+      </div>
     </div>
   );
 }
