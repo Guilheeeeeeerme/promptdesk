@@ -26,14 +26,16 @@ enum MessageStatus {
   cancelled
 }
 
-/// solved / not_solved are FINAL: the conversation becomes a view-only
-/// transcript and messaging is blocked (POST /chat → 409). Explicit reopen
-/// means PATCH status back to open / in_progress.
+/// Exactly four states. solved / not_solved / wont_solve are FINAL: the
+/// conversation becomes a view-only transcript and messaging is blocked
+/// (POST /chat → 409). Agents (owners) may only pick solved / not_solved and
+/// reopen to open. Platform roles (root/admin) may pick any state and are the
+/// man in the middle: they see every company thread and can reply manually.
 enum ConversationStatus {
   open
-  in_progress
   solved
   not_solved
+  wont_solve
 }
 
 /// Chat-scoped customer. companyId / createdById soft-ref core DB (no cross-DB FK).

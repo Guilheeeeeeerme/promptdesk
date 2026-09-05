@@ -74,6 +74,9 @@ services:
       - |
         set -e
         npm install --no-audit --no-fund --no-save
+        # Host builds leave a stale tsbuildinfo that makes incremental watch
+        # skip recompiles; start each dev session from a clean slate.
+        rm -f tsconfig.build.tsbuildinfo
         for schema in prisma/schema.prisma prisma-chat/schema.prisma; do
           if [ -f "$$schema" ]; then
             npx prisma generate --schema "$$schema"

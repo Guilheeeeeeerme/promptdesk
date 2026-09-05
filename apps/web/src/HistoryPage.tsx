@@ -1,16 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isPlatformRole } from '@shared/auth';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 
 type ConversationStatus =
   | 'open'
-  | 'in_progress'
   | 'solved'
-  | 'not_solved';
+  | 'not_solved'
+  | 'wont_solve';
+
+/** Platform (root/admin) may pick every state; agents reopen via open. */
+const PLATFORM_STATUSES: ConversationStatus[] = [
+  'open',
+  'solved',
+  'not_solved',
+  'wont_solve',
+];
+
+const FINAL_STATUSES: ConversationStatus[] = [
+  'solved',
+  'not_solved',
+  'wont_solve',
+];
 
 interface ConversationDto {
   id: string;
   companyId: string;
+  userId: string;
+  ownerName?: string | null;
+  ownerEmail?: string | null;
   title: string | null;
   status: ConversationStatus;
   pinned: boolean;
@@ -32,10 +50,18 @@ interface ChatMessageDto {
 
 const STATUS_LABELS: Record<ConversationStatus, string> = {
   open: 'Open',
-  in_progress: 'In progress',
   solved: 'Solved',
   not_solved: 'Not solved',
+  wont_solve: "Won't solve",
 };
+
+function statusLabel(status: ConversationStatus): string {
+  return STATUS_LABELS[status] ?? 'Open';
+}
+
+function isFinal(status: ConversationStatus): boolean {
+  return FINAL_STATUSES.includes(status);
+}
 
 function formatWhen(value: string | null): string {
   if (!value) return '—';
@@ -46,6 +72,7 @@ export function HistoryPage() {
   const { session } = useAuth();
   const companyId = session?.activeCompany?.id ?? null;
   const companyName = session?.activeCompany?.name ?? 'No company';
+  const isPlatform = isPlatformRole(session?.user.role ?? 'agent');
 
   const [items, setItems] = useState<ConversationDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,6 +196,27 @@ export function HistoryPage() {
     })();
   }, [activeSelectedId, companyId]);
 
+  const patchConversation = useCallback(
+    async (id: string, patch: Record<string, unknown>) => {
+      setError(null);
+      try {
+        const updated = await apiFetch<ConversationDto>(
+          `/chat/conversations/${id}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(patch),
+          },
+        );
+        // Merge locally: the PATCH response omits platform owner fields.
+        setDetail((prev) => (prev && prev.id === id ? { ...prev, ...updated } : prev));
+        await loadList();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Update failed');
+      }
+    },
+    [loadList],
+  );
+
   function selectConversation(id: string) {
     setSelectedId(id);
     setSelectedForCompanyId(companyId);
@@ -254,8 +302,11 @@ export function HistoryPage() {
                           <p className="text-sm font-medium text-gray-900 truncate">
                             {item.title?.trim() || 'Untitled chat'}
                           </p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {companyName} · {STATUS_LABELS[item.status]}
+                          <p className="mt-1 text-xs text-gray-500 truncate">
+                            {isPlatform && item.ownerName
+                              ? `${item.ownerName} · `
+                              : ''}
+                            {companyName} · {statusLabel(item.status)}
                           </p>
                         </div>
                         <time className="shrink-0 text-xs text-gray-400">
@@ -306,15 +357,60 @@ export function HistoryPage() {
                     {detail.title?.trim() || 'Untitled chat'}
                   </span>
                 </p>
+                {isPlatform && (detail.ownerName || detail.ownerEmail) && (
+                  <p>
+                    <span className="text-gray-500">Agent:</span>{' '}
+                    <span className="text-gray-900 break-words">
+                      {[detail.ownerName, detail.ownerEmail]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </p>
+                )}
                 <p>
                   <span className="text-gray-500">Company:</span>{' '}
                   <span className="text-gray-900">{companyName}</span>
                 </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Status:</span>
+                  {isPlatform ? (
+                    <select
+                      value={detail.status}
+                      onChange={(e) =>
+                        void patchConversation(detail.id, {
+                          status: e.target.value,
+                        })
+                      }
+                      className="rounded-md border border-gray-300 px-2 py-0.5 text-xs bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                      {!PLATFORM_STATUSES.includes(detail.status) && (
+                        <option value={detail.status} disabled>
+                          {statusLabel(detail.status)}
+                        </option>
+                      )}
+                      {PLATFORM_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {statusLabel(s)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-gray-900">{statusLabel(detail.status)}</span>
+                  )}
+                </div>
                 <p>
-                  <span className="text-gray-500">Status:</span>{' '}
-                  <span className="text-gray-900">
-                    {STATUS_LABELS[detail.status]}
-                  </span>
+                  <span className="text-gray-500">Rating:</span>{' '}
+                  {isFinal(detail.status) ? (
+                    <span className="text-gray-900">
+                      {detail.rating
+                        ? `${'★'.repeat(detail.rating)}${'☆'.repeat(5 - detail.rating)} (${detail.rating}/5)`
+                        : 'Not rated yet'}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">
+                      available once finished
+                    </span>
+                  )}
                 </p>
                 <p>
                   <span className="text-gray-500">Last activity:</span>{' '}
