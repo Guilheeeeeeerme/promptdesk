@@ -148,7 +148,10 @@ export function ChatPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
   const activeCompanyIdRef = useRef<string | null>(
@@ -320,6 +323,23 @@ export function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSidebarOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusable = sidebarRef.current?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      (previouslyFocused ?? menuButtonRef.current)?.focus?.();
+    };
+  }, [sidebarOpen]);
 
   const patchConversation = useCallback(
     async (id: string, patch: Record<string, unknown>) => {
@@ -531,27 +551,54 @@ export function ChatPage() {
     (m) => m.role === 'assistant' && isInFlight(m.status),
   );
 
+  function closeSidebar() {
+    setSidebarOpen(false);
+  }
+
+  function openSidebar() {
+    setSidebarOpen(true);
+  }
+
+  function startNewChat() {
+    setActiveId(null);
+    setMessages([]);
+    setError(null);
+    closeSidebar();
+  }
+
+  function selectConversation(id: string) {
+    setActiveId(id);
+    setError(null);
+    closeSidebar();
+  }
+
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <nav className="bg-white shadow-sm sticky top-0 z-10">
+    <div className="min-h-dvh flex flex-col bg-gray-50 overflow-x-hidden">
+      <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-8">
-              <h1 className="text-xl font-bold text-indigo-600">
+          <div className="flex justify-between h-14 sm:h-16 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-indigo-600 truncate">
                 AI Support Assistant
               </h1>
-              <span className="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+              <span className="hidden sm:inline-flex border-indigo-500 text-gray-900 items-center px-1 pt-1 border-b-2 text-sm font-medium">
                 Chat
               </span>
               <a
                 href={MAIN_ORIGIN}
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                className="hidden sm:inline-flex border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 items-center px-1 pt-1 border-b-2 text-sm font-medium"
               >
                 Main app
               </a>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 hidden sm:inline">
+            <div className="flex items-center gap-3 shrink-0">
+              <a
+                href={MAIN_ORIGIN}
+                className="sm:hidden text-sm font-medium text-gray-600 hover:text-gray-900"
+              >
+                Main
+              </a>
+              <span className="text-sm text-gray-600 hidden md:inline">
                 {session.user.name}
               </span>
               <button
@@ -566,24 +613,49 @@ export function ChatPage() {
         </div>
       </nav>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Support Chat</h1>
+      <main className="flex-1 flex flex-col min-h-0 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
+        <div className="mb-3 sm:mb-4 shrink-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+            Support Chat
+          </h1>
           <p className="mt-1 text-sm text-gray-600">
             Recommend replies using your company guidelines
           </p>
         </div>
 
-        <div className="flex gap-4 h-[640px]">
-          <aside className="w-72 shrink-0 bg-white shadow rounded-lg flex flex-col">
+        <div className="relative flex-1 flex gap-4 min-h-0 h-[min(40rem,calc(100dvh-9.5rem))] sm:h-[min(42rem,calc(100dvh-10.5rem))]">
+          {sidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close conversations menu"
+              className="fixed inset-0 z-40 bg-gray-900/40 md:hidden"
+              onClick={closeSidebar}
+            />
+          )}
+
+          <aside
+            ref={sidebarRef}
+            id="conversations-drawer"
+            aria-label="Conversations"
+            className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:static md:z-auto md:w-72 md:shrink-0 md:translate-x-0 md:shadow md:rounded-lg ${
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+            }`}
+          >
+            <div className="px-3 pt-3 flex items-center justify-between gap-2 md:hidden">
+              <p className="text-sm font-semibold text-gray-900">Conversations</p>
+              <button
+                type="button"
+                onClick={closeSidebar}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
+                aria-label="Close conversations menu"
+              >
+                Close
+              </button>
+            </div>
             <div className="px-3 pt-3">
               <button
                 type="button"
-                onClick={() => {
-                  setActiveId(null);
-                  setMessages([]);
-                  setError(null);
-                }}
+                onClick={startNewChat}
                 className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
               >
                 New chat
@@ -598,7 +670,7 @@ export function ChatPage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
+                  className="flex-1 min-w-0 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
                 >
                   <option value="">All statuses</option>
                   {CONVERSATION_STATUSES.map((s) => (
@@ -608,7 +680,7 @@ export function ChatPage() {
                   ))}
                 </select>
               </div>
-              <div className="mt-2 flex items-center gap-4 pb-2 text-xs text-gray-600">
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-xs text-gray-600">
                 <label className="inline-flex items-center gap-1">
                   <input
                     type="checkbox"
@@ -630,7 +702,7 @@ export function ChatPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto border-t border-gray-200">
+            <div className="flex-1 overflow-y-auto border-t border-gray-200 min-h-0">
               {conversations.length === 0 && (
                 <p className="text-sm text-gray-500 text-center py-6 px-3">
                   No conversations yet.
@@ -641,10 +713,7 @@ export function ChatPage() {
                   <li key={c.id}>
                     <button
                       type="button"
-                      onClick={() => {
-                        setActiveId(c.id);
-                        setError(null);
-                      }}
+                      onClick={() => selectConversation(c.id)}
                       className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${
                         c.id === activeId ? 'bg-indigo-50' : ''
                       }`}
@@ -676,22 +745,37 @@ export function ChatPage() {
             </div>
           </aside>
 
-          <div className="flex-1 bg-white shadow rounded-lg flex flex-col min-w-0">
-            <div className="px-4 py-3 border-b border-gray-200">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center min-w-0">
-                  <div className="bg-indigo-100 rounded-full h-10 w-10 flex items-center justify-center text-indigo-600 font-semibold shrink-0">
+          <div className="flex-1 bg-white shadow rounded-lg flex flex-col min-w-0 min-h-0 w-full">
+            <div className="px-3 sm:px-4 py-3 border-b border-gray-200 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center min-w-0 gap-2">
+                  <button
+                    ref={menuButtonRef}
+                    type="button"
+                    className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 shrink-0"
+                    aria-label="Open conversations menu"
+                    aria-expanded={sidebarOpen}
+                    aria-controls="conversations-drawer"
+                    onClick={openSidebar}
+                  >
+                    <span aria-hidden="true" className="block w-4 space-y-1">
+                      <span className="block h-px bg-current" />
+                      <span className="block h-px bg-current" />
+                      <span className="block h-px bg-current" />
+                    </span>
+                  </button>
+                  <div className="bg-indigo-100 rounded-full h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center text-indigo-600 font-semibold shrink-0">
                     {companyName.slice(0, 1).toUpperCase()}
                   </div>
-                  <div className="ml-3 min-w-0">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
                       {activeConversation?.title || 'New chat'}
                     </p>
-                    <p className="text-xs text-gray-500">{companyName}</p>
+                    <p className="text-xs text-gray-500 truncate">{companyName}</p>
                   </div>
                 </div>
                 {activeConversation && (
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 shrink-0 max-w-[55%]">
                     <select
                       value={activeConversation.status}
                       onChange={(e) =>
@@ -699,7 +783,7 @@ export function ChatPage() {
                           status: e.target.value,
                         })
                       }
-                      className="rounded-md border border-gray-300 px-2 py-1 text-xs bg-white focus:border-indigo-500 focus:ring-indigo-500"
+                      className="rounded-md border border-gray-300 px-2 py-1 text-xs bg-white focus:border-indigo-500 focus:ring-indigo-500 max-w-full"
                     >
                       {CONVERSATION_STATUSES.map((s) => (
                         <option key={s} value={s}>
@@ -774,7 +858,7 @@ export function ChatPage() {
               )}
             </div>
 
-            <div className="flex-1 p-4 overflow-y-auto">
+            <div className="flex-1 p-3 sm:p-4 overflow-y-auto min-h-0">
               <div className="flex flex-col space-y-4">
                 {messages.length === 0 && (
                   <p className="text-sm text-gray-500 text-center py-8">
@@ -792,7 +876,7 @@ export function ChatPage() {
                   return (
                     <div key={msg.id} className="flex items-end">
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs shrink-0 ${
                           isAssistant
                             ? 'bg-emerald-200 text-emerald-800'
                             : 'bg-indigo-200 text-indigo-700'
@@ -800,7 +884,7 @@ export function ChatPage() {
                       >
                         {label}
                       </div>
-                      <div className="flex flex-col space-y-2 text-sm max-w-xl mx-2 items-start">
+                      <div className="flex flex-col space-y-2 text-sm max-w-[min(36rem,calc(100%-2.5rem))] mx-2 items-start min-w-0">
                         {isInFlight(msg.status) ? (
                           <div className="space-y-2">
                             <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
@@ -819,7 +903,7 @@ export function ChatPage() {
                           </div>
                         ) : msg.status === 'failed' ? (
                           <div className="space-y-2">
-                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700">
+                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700 break-words">
                               {msg.lastError || 'Generation failed'}
                             </span>
                             {!viewOnly && (
@@ -838,7 +922,7 @@ export function ChatPage() {
                           </span>
                         ) : (
                           <span
-                            className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap ${
+                            className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap break-words ${
                               isAssistant
                                 ? 'bg-emerald-50 text-gray-800'
                                 : 'bg-gray-100 text-gray-700'
@@ -856,13 +940,13 @@ export function ChatPage() {
             </div>
 
             {error && (
-              <div className="px-4 py-2 text-sm text-red-600 border-t border-red-50 bg-red-50">
+              <div className="px-4 py-2 text-sm text-red-600 border-t border-red-50 bg-red-50 shrink-0 break-words">
                 {error}
               </div>
             )}
 
             {viewOnly && activeConversation && (
-              <div className="px-4 py-2 text-sm text-amber-800 bg-amber-50 border-t border-amber-100 flex items-center justify-between gap-3">
+              <div className="px-3 sm:px-4 py-2 text-sm text-amber-800 bg-amber-50 border-t border-amber-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
                 <span>
                   This conversation is{' '}
                   {STATUS_LABELS[activeConversation.status].toLowerCase()} —
@@ -882,8 +966,11 @@ export function ChatPage() {
               </div>
             )}
 
-            <div className="border-t border-gray-200 px-4 py-3">
-              <form className="flex items-end gap-3" onSubmit={onSend}>
+            <div className="border-t border-gray-200 px-3 sm:px-4 py-3 shrink-0">
+              <form
+                className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3"
+                onSubmit={onSend}
+              >
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -893,7 +980,7 @@ export function ChatPage() {
                       e.currentTarget.form?.requestSubmit();
                     }
                   }}
-                  rows={3}
+                  rows={2}
                   disabled={viewOnly}
                   placeholder={
                     viewOnly
@@ -902,12 +989,12 @@ export function ChatPage() {
                         ? 'Send to cancel current reply and ask again'
                         : 'Customer message (Shift+Enter for new line)'
                   }
-                  className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[4.5rem] disabled:bg-gray-100 disabled:text-gray-400"
+                  className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[3rem] max-h-[8rem] disabled:bg-gray-100 disabled:text-gray-400 w-full"
                 />
                 <button
                   type="submit"
                   disabled={sending || viewOnly || !input.trim()}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shrink-0 w-full sm:w-auto"
                 >
                   {sending ? 'Sending…' : hasInFlight ? 'Send (take over)' : 'Send'}
                 </button>
