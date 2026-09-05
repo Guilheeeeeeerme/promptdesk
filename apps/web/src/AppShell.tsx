@@ -9,11 +9,19 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { appendTokenToReturnUrl } from '@shared/auth';
 import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
+import type { Role } from './types';
 
-const navItems = [
+const navItems: Array<{
+  to: string;
+  label: string;
+  exact?: boolean;
+  roles?: Role[];
+}> = [
   { to: '/', label: 'Home', exact: true },
   { to: '/history', label: 'History' },
   { to: '/companies', label: 'Companies' },
+
+  { to: '/users', label: 'Users', roles: ['root', 'admin', 'manager'] },
 ];
 
 function supportHref(): string {
@@ -126,6 +134,10 @@ export function AppShell() {
       : location.pathname.startsWith(item.to);
   }
 
+  const visibleNavItems = navItems.filter(
+    (item) => !item.roles || item.roles.includes(session.user.role),
+  );
+
   return (
     <div className="min-h-dvh flex bg-gray-50 overflow-x-hidden">
       <aside className="hidden md:flex md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 bg-white border-r border-gray-200 flex-col">
@@ -168,7 +180,7 @@ export function AppShell() {
           </div>
         )}
         <nav aria-label="Main navigation" className="flex-1 px-3 py-5 space-y-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = isActive(item);
             return (
               <Link
@@ -286,7 +298,7 @@ export function AppShell() {
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = isActive(item);
             return (
               <Link

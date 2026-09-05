@@ -8,6 +8,7 @@ import { LoginPage } from './LoginPage';
 import { HistoryPage } from './HistoryPage';
 import { SessionHome } from './SessionHome';
 import { SsoHandoffPage } from './SsoHandoffPage';
+import { UsersPage } from './UsersPage';
 
 function ChatRedirect() {
   const token = getToken();
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/companies" element={<CompaniesPage />} />
         <Route path="/companies/new" element={<AddCompanyPage />} />
+        <Route path="/users" element={<UsersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

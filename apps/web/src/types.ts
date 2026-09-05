@@ -29,3 +29,26 @@ export interface GuidelineVersionMeta {
   byteSize?: number | null;
   createdAt: string;
 }
+
+export interface UserView {
+  id: string;
+  email: string;
+  name: string;
+  role: import('@shared/auth').Role;
+  companyId: string | null;
+  createdAt: string;
+}
+
+export interface CreateUserInput {
+  email: string;
+  name: string;
+  role: UserView['role'];
+  password: string;
+}
+
+export interface UpdateUserInput {
+  email?: string;
+  name?: string;
+  role?: UserView['role'];
+  password?: string;
+}
