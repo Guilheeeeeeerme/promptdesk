@@ -43,6 +43,23 @@ export type ChatGenerateJobData = {
 
 export type GuidelineValidateJobData = { companyId: string; versionId: string };
 
+export type GuidelineValidationEvent = {
+  type: 'guideline_validation';
+  companyId: string;
+  versionId: string;
+  version: number;
+  status:
+    | 'pending'
+    | 'processing'
+    | 'valid'
+    | 'invalid'
+    | 'provider_error'
+    | 'cancelled';
+  reason?: string | null;
+  activeVersion?: number | null;
+  occurredAt: string;
+};
+
 export type ChatJobEvent = {
   userId: string;
   assistantMessageId: string;
@@ -83,4 +100,7 @@ export type ChatConversationUpdateEvent = {
 
 /** Anything published on CHAT_EVENTS_CHANNEL. Legacy job events omit type. */
 export type ChatChannelEvent =
-  ChatAgentMessageEvent | ChatConversationUpdateEvent | ChatJobEvent;
+  | ChatAgentMessageEvent
+  | ChatConversationUpdateEvent
+  | GuidelineValidationEvent
+  | ChatJobEvent;

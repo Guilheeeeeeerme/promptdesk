@@ -1,7 +1,10 @@
 import {
+  ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
   OnGatewayInit,
+  SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
@@ -15,6 +18,7 @@ import {
   type ChatChannelEvent,
   type ChatJobEvent,
 } from './chat.constants';
+import { isPlatformRole, type SessionData } from '../auth/session.types';
 
 @WebSocketGateway({
   cors: {
@@ -54,23 +58,51 @@ export class ChatGateway
       if (channel !== CHAT_EVENTS_CHANNEL) return;
       try {
         const event = JSON.parse(raw) as ChatChannelEvent;
-        if ('type' in event && event.type === 'agent_message') {
-          this.server.to(`user:${event.ownerId}`).emit('agent:message', event);
-          return;
-        }
-        if ('type' in event && event.type === 'conversation_update') {
-          this.server
-            .to(`user:${event.ownerId}`)
-            .emit('conversation:update', event);
-          return;
-        }
-        this.server
-          .to(`user:${(event as ChatJobEvent).userId}`)
-          .emit('job:update', event);
+        this.dispatchChannelEvent(event);
       } catch (err) {
         this.logger.warn(`Invalid chat event payload: ${String(err)}`);
       }
     });
+  }
+
+  dispatchChannelEvent(event: ChatChannelEvent): void {
+    if ('type' in event && event.type === 'guideline_validation') {
+      this.server
+        .to(`company:${event.companyId}`)
+        .emit('guideline:validation', event);
+      return;
+    }
+    if ('type' in event && event.type === 'agent_message') {
+      this.server.to(`user:${event.ownerId}`).emit('agent:message', event);
+      return;
+    }
+    if ('type' in event && event.type === 'conversation_update') {
+      this.server
+        .to(`user:${event.ownerId}`)
+        .emit('conversation:update', event);
+      return;
+    }
+    this.server
+      .to(`user:${(event as ChatJobEvent).userId}`)
+      .emit('job:update', event);
+  }
+
+  @SubscribeMessage('guideline:subscribe')
+  async subscribeToGuidelines(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { companyId?: string },
+  ): Promise<{ status: 'subscribed' | 'forbidden' }> {
+    const session = client.data.session as SessionData;
+    const companyId = body.companyId?.trim();
+    if (
+      !companyId ||
+      (!isPlatformRole(session.role) && session.activeCompanyId !== companyId)
+    ) {
+      return { status: 'forbidden' };
+    }
+
+    await client.join(`company:${companyId}`);
+    return { status: 'subscribed' };
   }
 
   async onModuleDestroy() {

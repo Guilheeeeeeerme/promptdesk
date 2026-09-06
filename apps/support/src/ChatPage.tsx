@@ -723,7 +723,7 @@ export function ChatPage() {
             ref={sidebarRef}
             id="conversations-drawer"
             aria-label="Conversations"
-            className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:static md:z-auto md:w-72 md:shrink-0 md:translate-x-0 md:shadow md:rounded-lg ${
+            className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] min-h-0 bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:static md:z-auto md:w-72 md:shrink-0 md:translate-x-0 md:shadow md:rounded-lg ${
               sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
             }`}
           >

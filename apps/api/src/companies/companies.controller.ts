@@ -92,6 +92,19 @@ export class CompaniesController {
     );
   }
 
+  @Delete(':id/guidelines/versions/:versionId')
+  cancelGuidelineVersion(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+  ) {
+    return this.companies.cancelGuidelineVersion(
+      req.session,
+      id,
+      versionId,
+    );
+  }
+
   @Delete(':id/guidelines')
   deleteGuidelines(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.companies.deleteGuidelines(req.session, id);

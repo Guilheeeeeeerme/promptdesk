@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiFetch } from './api';
+import { io, type Socket } from 'socket.io-client';
+import {
+  apiFetch,
+  getApiOrigin,
+  getSocketPath,
+  getToken,
+} from './api';
 import { useAuth } from './auth';
 import type {
   Company,
   CompanyDetail,
+  GuidelineValidationEvent,
   GuidelineValidationStatus,
+  GuidelineVersionDetail,
   GuidelineVersionMeta,
 } from './types';
 import { isPlatformRole } from './types';
@@ -21,16 +29,20 @@ function formatDate(value: string | null | undefined): string {
 
 const VALIDATION_STATUS_LABELS: Record<GuidelineValidationStatus, string> = {
   pending: 'Pending validation',
+  processing: 'Validating',
   valid: 'Valid',
   invalid: 'Invalid',
   provider_error: 'Provider error',
+  cancelled: 'Cancelled',
 };
 
 const VALIDATION_STATUS_STYLES: Record<GuidelineValidationStatus, string> = {
   pending: 'bg-amber-100 text-amber-800',
+  processing: 'bg-sky-100 text-sky-800',
   valid: 'bg-emerald-100 text-emerald-800',
   invalid: 'bg-rose-100 text-rose-800',
   provider_error: 'bg-orange-100 text-orange-800',
+  cancelled: 'bg-gray-100 text-gray-700',
 };
 
 function validationStatusLabel(status: string): string {
@@ -75,7 +87,15 @@ export function CompaniesPage() {
     GuidelineVersionMeta[] | null
   >(null);
   const [viewLoading, setViewLoading] = useState(false);
+  const [viewTab, setViewTab] = useState<'replace' | 'history'>('replace');
+  const [historyDetail, setHistoryDetail] =
+    useState<GuidelineVersionDetail | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const socketRef = useRef<Socket | null>(null);
+  const companiesRef = useRef<Company[]>([]);
+  const viewingRef = useRef<CompanyDetail | null>(null);
+  companiesRef.current = companies;
+  viewingRef.current = viewing;
 
   const canManage = Boolean(
     session &&
@@ -101,7 +121,7 @@ export function CompaniesPage() {
     })();
   }, [load]);
 
-  async function openGuidelines(companyId: string) {
+  const openGuidelines = useCallback(async (companyId: string) => {
     setViewLoading(true);
     setError(null);
     try {
@@ -113,12 +133,108 @@ export function CompaniesPage() {
       ]);
       setViewing(detail);
       setViewingVersions(versions);
+      setHistoryDetail(null);
+      socketRef.current?.emit('guideline:subscribe', { companyId });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load guidelines');
     } finally {
       setViewLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    const socket = io(getApiOrigin(), {
+      path: getSocketPath(),
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
+    const subscribeVisible = () => {
+      for (const company of companiesRef.current) {
+        socket.emit('guideline:subscribe', { companyId: company.id });
+      }
+    };
+    socket.on('connect', subscribeVisible);
+    socket.on('ready', subscribeVisible);
+    socket.on('guideline:validation', (event: GuidelineValidationEvent) => {
+      setViewingVersions((versions) =>
+        viewingRef.current?.id === event.companyId && versions
+          ? versions.map((version) =>
+              version.id === event.versionId
+                ? {
+                    ...version,
+                    status: event.status,
+                    validationReason: event.reason ?? null,
+                    validationStartedAt:
+                      event.status === 'processing'
+                        ? event.occurredAt
+                        : version.validationStartedAt,
+                    validatedAt:
+                      event.status === 'processing'
+                        ? version.validatedAt
+                        : event.occurredAt,
+                  }
+                : version,
+            )
+          : versions,
+      );
+      if (event.status !== 'processing' && event.status !== 'pending') {
+        void load();
+        void refreshCompanies();
+        if (viewingRef.current?.id === event.companyId) {
+          void openGuidelines(event.companyId);
+        }
+      }
+    });
+    socketRef.current = socket;
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [load, openGuidelines, refreshCompanies]);
+
+  useEffect(() => {
+    if (!socketRef.current?.connected) return;
+    for (const company of companies) {
+      socketRef.current.emit('guideline:subscribe', { companyId: company.id });
+    }
+  }, [companies]);
+
+  async function cancelPending(companyId: string, versionId: string) {
+    setBusyId(companyId);
+    setError(null);
+    try {
+      await apiFetch(`/companies/${companyId}/guidelines/versions/${versionId}`, {
+        method: 'DELETE',
+      });
+      await openGuidelines(companyId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Cancellation failed');
+    } finally {
+      setBusyId(null);
+    }
   }
+
+  async function inspectVersion(companyId: string, versionId: string) {
+    try {
+      setHistoryDetail(
+        await apiFetch<GuidelineVersionDetail>(
+          `/companies/${companyId}/guidelines/versions/${versionId}`,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load version');
+    }
+  }
+
+  const activeVersionMeta = viewingVersions?.find(
+    (version) => version.version === viewing?.currentVersion,
+  );
+  const pendingReplacement = viewingVersions?.find(
+    (version) =>
+      version.status === 'pending' || version.status === 'processing',
+  );
 
   async function onUpload(companyId: string, file: File | undefined) {
     if (!file) return;
@@ -245,7 +361,10 @@ export function CompaniesPage() {
                         <button
                           type="button"
                           disabled={viewLoading}
-                          onClick={() => void openGuidelines(company.id)}
+                          onClick={() => {
+                            setViewTab('replace');
+                            void openGuidelines(company.id);
+                          }}
                           className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         >
                           <i className="fas fa-eye mr-1" aria-hidden="true" />
@@ -352,7 +471,7 @@ export function CompaniesPage() {
           aria-modal="true"
           aria-labelledby="guidelines-title"
         >
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col">
             <div className="px-4 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
               <div>
                 <h2
@@ -363,115 +482,136 @@ export function CompaniesPage() {
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
                   {viewing.guidelineFileName ?? 'No file uploaded'}
-                  {viewing.currentVersion ? ` · version ${viewing.currentVersion}` : ''}
+                  {viewing.currentVersion
+                    ? ` · active version ${viewing.currentVersion}`
+                    : ''}
                   {viewing.guidelineUpdatedAt
                     ? ` · updated ${formatDate(viewing.guidelineUpdatedAt)}`
                     : ''}
                 </p>
-                <div className="mt-3 grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
-                  <p>
-                    <span className="font-medium text-gray-700">Active:</span>{' '}
-                    {viewing.currentVersion
-                      ? `v${viewing.currentVersion}`
-                      : 'None'}
-                    {viewing.currentVersion &&
-                    viewingVersions?.find(
-                      (version) => version.version === viewing.currentVersion,
-                    )?.contentHash
-                      ? ` · ${shortHash(
-                          viewingVersions.find(
-                            (version) =>
-                              version.version === viewing.currentVersion,
-                          )?.contentHash,
-                        )}`
-                      : ''}
-                  </p>
-                  <p>
-                    <span className="font-medium text-gray-700">
-                      Latest valid:
-                    </span>{' '}
-                    {viewing.latestValidVersion
-                      ? `v${viewing.latestValidVersion} · ${shortHash(
-                          viewing.latestValidVersionHash,
-                        )}`
-                      : 'None'}
-                  </p>
-                </div>
-                {(() => {
-                  const pending = viewingVersions?.find(
-                    (version) => version.status === 'pending',
-                  );
-                  const latestAttempt = viewingVersions?.[0];
-                  const replacementFailed = Boolean(
-                    latestAttempt &&
-                      latestAttempt.version !== viewing.currentVersion &&
-                      (latestAttempt.status === 'invalid' ||
-                        latestAttempt.status === 'provider_error'),
-                  );
-                  return (
-                    <div className="mt-2 space-y-1 text-xs">
-                      {pending && (
-                        <p className="text-amber-700">
-                          Pending version: v{pending.version} · validation in progress
-                        </p>
-                      )}
-                      {replacementFailed && latestAttempt && (
-                        <p className="text-orange-700">
-                          Active guideline remains v{viewing.currentVersion ?? 'none'};{' '}
-                          v{latestAttempt.version} was not activated.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
               </div>
               <button
                 type="button"
                 onClick={() => {
                   setViewing(null);
                   setViewingVersions(null);
+                  setHistoryDetail(null);
                 }}
                 className="text-gray-400 hover:text-gray-600 text-sm font-medium"
               >
                 Close
               </button>
             </div>
-            {viewingVersions && viewingVersions.length > 0 && (
-              <ul className="px-4 py-3 border-b border-gray-100 space-y-1 text-sm text-gray-500">
-                {viewingVersions.map((v) => (
-                  <li key={v.id} className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium text-gray-700">
-                      v{v.version}
-                    </span>
-                    <span className="truncate">
-                      {v.fileName ?? 'guidelines.txt'}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <time
-                      dateTime={v.createdAt}
-                      className="flex-shrink-0 whitespace-nowrap"
-                    >
-                      {formatDate(v.createdAt)}
-                    </time>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${validationStatusStyle(v.status)}`}
-                    >
-                      {validationStatusLabel(v.status)}
-                    </span>
-                    {v.validationReason && (
-                      <span className="min-w-0 truncate text-gray-600">
-                        — {v.validationReason}
-                      </span>
+            <div className="flex border-b border-gray-200 px-4" role="tablist">
+              {(['replace', 'history'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewTab === tab}
+                  onClick={() => setViewTab(tab)}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 ${
+                    viewTab === tab
+                      ? 'border-indigo-600 text-indigo-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab === 'replace' ? 'Current & Replace' : 'History'}
+                </button>
+              ))}
+            </div>
+
+            {viewTab === 'replace' ? (
+              <div className="min-h-0 overflow-auto p-4 space-y-4">
+                {pendingReplacement && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3">
+                    <div className="text-sm text-amber-900">
+                      <p className="font-medium">
+                        Replacement v{pendingReplacement.version}:{' '}
+                        {validationStatusLabel(pendingReplacement.status)}
+                      </p>
+                      <p className="text-xs mt-1">
+                        Current v{viewing.currentVersion ?? 'none'} remains active until validation succeeds.
+                      </p>
+                    </div>
+                    {canManage && pendingReplacement.status === 'pending' && (
+                      <button
+                        type="button"
+                        disabled={busyId === viewing.id}
+                        onClick={() =>
+                          void cancelPending(viewing.id, pendingReplacement.id)
+                        }
+                        className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-60"
+                      >
+                        Cancel pending
+                      </button>
                     )}
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                )}
+                <div className="text-xs text-gray-600">
+                  <span className="font-medium text-gray-700">Active:</span>{' '}
+                  {viewing.currentVersion
+                    ? `v${viewing.currentVersion} · ${shortHash(activeVersionMeta?.contentHash)}`
+                    : 'None'}
+                </div>
+                <pre className="rounded-md bg-gray-50 border border-gray-200 p-4 text-sm text-gray-800 whitespace-pre-wrap">
+                  {viewing.guidelineText?.trim()
+                    ? viewing.guidelineText
+                    : 'No validated guideline is active for this company.'}
+                </pre>
+              </div>
+            ) : (
+              <div className="min-h-0 overflow-auto p-4 space-y-4">
+                {!viewingVersions?.length ? (
+                  <p className="text-sm text-gray-500">No guideline history.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md">
+                    {viewingVersions.map((version) => (
+                      <li key={version.id} className="p-3 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void inspectVersion(viewing.id, version.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="font-medium text-gray-800">v{version.version}</span>{' '}
+                          <span className="text-sm text-gray-500">
+                            {version.fileName ?? 'guidelines.txt'} · {formatDate(version.createdAt)}
+                          </span>
+                          {version.validationReason && (
+                            <span className="block truncate text-xs text-gray-500 mt-1">
+                              {version.validationReason}
+                            </span>
+                          )}
+                        </button>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${validationStatusStyle(version.status)}`}>
+                          {validationStatusLabel(version.status)}
+                        </span>
+                        {canManage && version.status === 'pending' && (
+                          <button
+                            type="button"
+                            disabled={busyId === viewing.id}
+                            onClick={() => void cancelPending(viewing.id, version.id)}
+                            className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-60"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {historyDetail && (
+                  <div className="rounded-md border border-gray-200">
+                    <div className="border-b border-gray-200 px-3 py-2 text-sm font-medium text-gray-700">
+                      Version {historyDetail.version} snapshot
+                    </div>
+                    <pre className="p-4 text-sm text-gray-800 whitespace-pre-wrap">
+                      {historyDetail.content}
+                    </pre>
+                  </div>
+                )}
+              </div>
             )}
-            <pre className="px-4 py-4 overflow-auto text-sm text-gray-800 whitespace-pre-wrap flex-1">
-              {viewing.guidelineText?.trim()
-                ? viewing.guidelineText
-                : 'No guidelines uploaded for this company yet.'}
-            </pre>
           </div>
         </div>
       )}
