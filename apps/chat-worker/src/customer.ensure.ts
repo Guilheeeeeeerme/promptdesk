@@ -1,6 +1,6 @@
 import type { PrismaClient as ChatPrismaClient } from '@prisma/chat-client';
 import {
-  FALLBACK_CUSTOMER_NAME,
+  UNKNOWN_CUSTOMER_NAME,
   inferCustomerEmail,
   inferCustomerName,
 } from './placeholders';
@@ -38,7 +38,7 @@ export async function ensureCustomerForChat(
       data: {
         companyId: params.companyId,
         createdById: params.agentUserId,
-        displayName: inferredName ?? FALLBACK_CUSTOMER_NAME,
+        displayName: inferredName ?? UNKNOWN_CUSTOMER_NAME,
         email: inferredEmail,
       },
     }));
@@ -46,7 +46,7 @@ export async function ensureCustomerForChat(
   const patch: { displayName?: string; email?: string } = {};
   if (
     inferredName &&
-    (customer.displayName === FALLBACK_CUSTOMER_NAME ||
+    (customer.displayName === UNKNOWN_CUSTOMER_NAME ||
       customer.displayName.trim().length === 0)
   ) {
     patch.displayName = inferredName;

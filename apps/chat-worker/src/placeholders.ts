@@ -8,6 +8,8 @@ export type PlaceholderValues = {
   date: string;
 };
 
+export type PromptMode = 'agent' | 'customer_draft';
+
 /** Bracket keys (lowercased) → value field. Unknown keys left untouched. */
 const PLACEHOLDER_ALIASES: Record<string, keyof PlaceholderValues> = {
   name: 'customerName',
@@ -32,7 +34,8 @@ const PLACEHOLDER_ALIASES: Record<string, keyof PlaceholderValues> = {
   'current date': 'date',
 };
 
-const FALLBACK_CUSTOMER_NAME = 'Customer';
+/** Empty means unknown; this is intentionally not a human-facing name. */
+export const UNKNOWN_CUSTOMER_NAME = '';
 
 export function formatToday(date = new Date()): string {
   return date.toLocaleDateString('en-US', {
@@ -70,7 +73,7 @@ export function buildPlaceholderValues(input: {
   date?: Date;
 }): PlaceholderValues {
   return {
-    customerName: input.customerName?.trim() || FALLBACK_CUSTOMER_NAME,
+    customerName: input.customerName?.trim() || UNKNOWN_CUSTOMER_NAME,
     companyName: input.companyName?.trim() || 'our company',
     agentName: input.agentName?.trim() || 'Support',
     agentEmail: input.agentEmail?.trim() || '',
@@ -94,11 +97,15 @@ export function applyPlaceholders(
 /** Prompt block: tell the model never to leave bracket tokens. */
 export function buildPlaceholderPromptBlock(values: PlaceholderValues): string {
   const lines = [
-    'Known context (use these values; NEVER leave square-bracket placeholders such as [Name], [Customer Name], [Company], [Company Name], [Date], or [Today] in your reply):',
-    `- Customer name: ${values.customerName}`,
+    'Known context (use only these values; NEVER leave square-bracket placeholders such as [Name], [Customer Name], [Company], [Company Name], [Date], or [Today] in your reply):',
     `- Company name: ${values.companyName}`,
     `- Agent name: ${values.agentName}`,
   ];
+  if (values.customerName) {
+    lines.splice(1, 0, `- Customer name: ${values.customerName}`);
+  } else {
+    lines.splice(1, 0, '- Customer name: unknown (do not invent or address them as “Customer”)');
+  }
   if (values.agentEmail) {
     lines.push(`- Agent email: ${values.agentEmail}`);
   }
@@ -108,5 +115,3 @@ export function buildPlaceholderPromptBlock(values: PlaceholderValues): string {
   );
   return lines.join('\n');
 }
-
-export { FALLBACK_CUSTOMER_NAME };
