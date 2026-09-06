@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY node_modules ./node_modules
 COPY dist ./dist
 COPY prisma ./prisma
+COPY prisma-chat ./prisma-chat
 COPY tsconfig.json ./
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
