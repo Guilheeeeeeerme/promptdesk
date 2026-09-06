@@ -32,7 +32,7 @@ build passed.
 
 ## Commit
 
-Pending: `feat: add validated guideline lifecycle`
+Initial lifecycle commit: `7376af4 feat: add validated guideline lifecycle`.
 
 ## Follow-up: executable validation path
 
@@ -43,3 +43,5 @@ Pending: `feat: add validated guideline lifecycle`
   worker processor that persists terminal status/reason/timestamp and activates
   only the newest valid version. Malicious deterministic results are persisted
   as `invalid` because the database lifecycle intentionally has four states.
+
+Follow-up commit: `443a8c2 feat: execute guideline validation jobs`.
