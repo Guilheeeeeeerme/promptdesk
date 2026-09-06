@@ -79,6 +79,15 @@ export class CompaniesController {
     return this.companies.getGuidelineVersion(req.session, id, versionId);
   }
 
+  @Post(':id/guidelines/versions/:versionId/validate')
+  validateGuidelineVersion(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+  ) {
+    return this.companies.enqueueValidationForVersion(req.session, id, versionId);
+  }
+
   @Delete(':id/guidelines')
   deleteGuidelines(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.companies.deleteGuidelines(req.session, id);

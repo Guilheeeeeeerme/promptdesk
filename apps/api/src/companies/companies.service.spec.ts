@@ -1,3 +1,9 @@
+jest.mock('../redis/redis.service', () => ({
+  RedisService: class RedisService {},
+}));
+jest.mock('@nestjs/bullmq', () => ({
+  InjectQueue: () => () => undefined,
+}));
 import { CompaniesService } from './companies.service';
 
 describe('CompaniesService safe guideline lifecycle', () => {

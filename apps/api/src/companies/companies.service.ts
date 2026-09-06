@@ -11,6 +11,9 @@ import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionData, isPlatformRole } from '../auth/session.types';
 import { RedisService } from '../redis/redis.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { GUIDELINE_VALIDATE_QUEUE, type GuidelineValidateJobData } from '../chat/chat.constants';
 
 const MAX_GUIDELINE_BYTES = 10 * 1024 * 1024; // 10MB, matches boilerplate
 const GUIDELINE_UPLOAD_LIMIT = 10;
@@ -62,6 +65,8 @@ export class CompaniesService {
     private readonly prisma: PrismaService,
     private readonly chatPrisma: ChatPrismaService,
     private readonly redis: RedisService,
+    @InjectQueue(GUIDELINE_VALIDATE_QUEUE)
+    private readonly guidelineQueue?: Queue<GuidelineValidateJobData>,
   ) {}
 
   private async enforceUploadRateLimit(
@@ -320,12 +325,37 @@ export class CompaniesService {
       return version;
     });
 
+    await this.enqueueValidation(companyId, version.id);
     const current = await this.getOne(session, companyId);
     return {
       ...current,
       pendingVersion: version.version,
       validationStatus: 'pending',
     };
+  }
+
+  async enqueueValidationForVersion(
+    session: SessionData,
+    companyId: string,
+    versionId: string,
+  ) {
+    await this.assertCanManage(session, companyId);
+    const version = await this.prisma.guidelineVersion.findFirst({
+      where: { id: versionId, companyId },
+      select: { id: true, status: true },
+    });
+    if (!version) throw new NotFoundException('Guideline version not found');
+    await this.enqueueValidation(companyId, version.id);
+    return { versionId: version.id, status: version.status };
+  }
+
+  private async enqueueValidation(companyId: string, versionId: string) {
+    if (!this.guidelineQueue) return;
+    await this.guidelineQueue.add(
+      'validate',
+      { companyId, versionId },
+      { jobId: `guideline-validate:${versionId}`, removeOnComplete: 100, removeOnFail: 200 },
+    );
   }
 
   /** Records asynchronous validator output and activates only a valid version. */
