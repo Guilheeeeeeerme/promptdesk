@@ -114,9 +114,14 @@ export class ChatGenerateProcessor extends WorkerHost {
     try {
       await this.assertNotAborted(assistantMessageId);
 
-      const [company, agent, userMessage, conversation, history] =
+      const [company, guidelineVersion, agent, userMessage, conversation, history] =
         await Promise.all([
           this.corePrisma.company.findUnique({ where: { id: companyId } }),
+          this.corePrisma.guidelineVersion.findFirst({
+            where: { companyId, status: 'valid' },
+            orderBy: { version: 'desc' },
+            select: { id: true, content: true, contentHash: true, version: true },
+          }),
           this.corePrisma.user.findUnique({ where: { id: userId } }),
           this.prisma.chatMessage.findUnique({ where: { id: userMessageId } }),
           conversationId
@@ -163,17 +168,9 @@ export class ChatGenerateProcessor extends WorkerHost {
         throw new Error('Conversation ownership mismatch');
       }
 
-      // Sticky guidance: bound once at conversation start; the live company
-      // guideline is never re-read here. Company row is used only for name
-      // placeholders.
-      let guidelines: string | null = null;
-      if (conversation) {
-        guidelines = conversation.guidelineSnapshot ?? null;
-      } else {
-        this.logger.log(
-          `Legacy job without conversationId; generating without guideline snapshot for ${assistantMessageId}`,
-        );
-      }
+      // Resolve at execution time so replacements apply to existing
+      // conversations and retries are traceable to the policy actually used.
+      const guidelines = guidelineVersion?.content ?? null;
 
       await this.assertNotAborted(assistantMessageId);
 
@@ -243,6 +240,8 @@ export class ChatGenerateProcessor extends WorkerHost {
           provider,
           attemptCount: totalAttempts,
           customerId: customer.id,
+          guidelineVersionId: guidelineVersion?.id ?? null,
+          guidelineVersionHash: guidelineVersion?.contentHash ?? null,
         },
       });
 

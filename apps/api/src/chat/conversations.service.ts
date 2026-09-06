@@ -157,6 +157,8 @@ export class ConversationsService {
       lastError: message.lastError,
       model: message.model,
       provider: message.provider ?? null,
+      guidelineVersionId: message.guidelineVersionId ?? null,
+      guidelineVersionHash: message.guidelineVersionHash ?? null,
       conversationId: message.conversationId,
       createdAt: message.createdAt,
     };

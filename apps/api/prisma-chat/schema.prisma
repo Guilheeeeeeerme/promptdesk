@@ -73,6 +73,9 @@ model ChatMessage {
   model           String?
   /// AI provider id (e.g. gemini | openai). Owned by provider sibling.
   provider        String?
+  /// Audit of the valid guideline resolved when this assistant reply ran.
+  guidelineVersionId   String?
+  guidelineVersionHash String?
   createdAt       DateTime      @default(now())
 
   @@index([companyId, createdAt])
