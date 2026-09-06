@@ -57,6 +57,8 @@ function canViewCompanyHistory(session: SessionData): boolean {
 
 /** Query params arrive as strings; normalized here. */
 export interface ListConversationsFilters {
+  /** Support MFE requests this explicitly; the main app omits it. */
+  scope?: 'mine' | 'company';
   status?: string;
   pinned?: string;
   archived?: string;
@@ -325,6 +327,13 @@ export class ConversationsService {
   async list(session: SessionData, filters: ListConversationsFilters) {
     const companyId = this.assertActiveCompany(session);
 
+    if (
+      filters.scope !== undefined &&
+      !['mine', 'company'].includes(filters.scope)
+    ) {
+      throw new BadRequestException('Invalid conversation scope');
+    }
+
     if (filters.q && filters.q.length > MAX_CONVERSATION_SEARCH_LENGTH) {
       throw new BadRequestException('Search query is too long');
     }
@@ -356,7 +365,9 @@ export class ConversationsService {
         companyId,
         // Platform roles (root/admin) see every agent thread in the company;
         // everyone else stays locked to their own.
-        ...(canViewCompanyHistory(session) ? {} : { userId: session.userId }),
+        ...(filters.scope === 'mine' || !canViewCompanyHistory(session)
+          ? { userId: session.userId }
+          : {}),
         deletedAt: null,
         ...(filters.status !== undefined && filters.status !== ''
           ? { status: filters.status as ConversationStatus }

@@ -27,6 +27,7 @@ export class ConversationsController {
   @Get()
   list(
     @Req() req: AuthenticatedRequest,
+    @Query('scope') scope?: 'mine' | 'company',
     @Query('status') status?: string,
     @Query('pinned') pinned?: string,
     @Query('archived') archived?: string,
@@ -35,6 +36,7 @@ export class ConversationsController {
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset?: number,
   ) {
     const filters: ListConversationsFilters = {
+      scope,
       status,
       pinned,
       archived,
