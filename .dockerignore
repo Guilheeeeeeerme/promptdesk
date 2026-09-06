@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+.git
+.serena
+.playwright-mcp
+docs
+use-cases
+guidelines
+*.md
+.env
+.env.*
+*.tsbuildinfo
