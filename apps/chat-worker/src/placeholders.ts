@@ -32,7 +32,6 @@ const PLACEHOLDER_ALIASES: Record<string, keyof PlaceholderValues> = {
   'current date': 'date',
 };
 
-const FALLBACK_CUSTOMER_NAME = 'Customer';
 
 export function formatToday(date = new Date()): string {
   return date.toLocaleDateString('en-US', {
@@ -70,7 +69,7 @@ export function buildPlaceholderValues(input: {
   date?: Date;
 }): PlaceholderValues {
   return {
-    customerName: input.customerName?.trim() || FALLBACK_CUSTOMER_NAME,
+    customerName: input.customerName?.trim() || '',
     companyName: input.companyName?.trim() || 'our company',
     agentName: input.agentName?.trim() || 'Support',
     agentEmail: input.agentEmail?.trim() || '',
@@ -95,7 +94,9 @@ export function applyPlaceholders(
 export function buildPlaceholderPromptBlock(values: PlaceholderValues): string {
   const lines = [
     'Known context (use these values; NEVER leave square-bracket placeholders such as [Name], [Customer Name], [Company], [Company Name], [Date], or [Today] in your reply):',
-    `- Customer name: ${values.customerName}`,
+    values.customerName
+      ? `- Customer name: ${values.customerName}`
+      : '- Customer name: unknown (do not invent or address them by a placeholder name)',
     `- Company name: ${values.companyName}`,
     `- Agent name: ${values.agentName}`,
   ];
@@ -108,5 +109,3 @@ export function buildPlaceholderPromptBlock(values: PlaceholderValues): string {
   );
   return lines.join('\n');
 }
-
-export { FALLBACK_CUSTOMER_NAME };
