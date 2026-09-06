@@ -1,5 +1,6 @@
-export const CHAT_GENERATE_QUEUE = 'chat-generate';
-export const CHAT_EVENTS_CHANNEL = 'chat:events';
+export const CHAT_GENERATE_QUEUE = "chat-generate";
+export const GUIDELINE_VALIDATE_QUEUE = "guideline-validate";
+export const CHAT_EVENTS_CHANNEL = "chat:events";
 
 export const CHAT_ABORT_TTL_SECONDS = 60 * 30;
 
@@ -7,7 +8,7 @@ export function chatAbortKey(assistantMessageId: string): string {
   return `chat:abort:${assistantMessageId}`;
 }
 
-export type ChatProvider = 'gemini' | 'openai';
+export type ChatProvider = "gemini" | "openai";
 
 export type ChatGenerateJobData = {
   assistantMessageId: string;
@@ -22,11 +23,13 @@ export type ChatGenerateJobData = {
   priorAttemptCount?: number;
 };
 
+export type GuidelineValidateJobData = { companyId: string; versionId: string };
+
 export type ChatJobEvent = {
   userId: string;
   assistantMessageId: string;
   userMessageId: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   content?: string;
   error?: string;
   model?: string;
@@ -36,6 +39,6 @@ export type ChatJobEvent = {
 export class ChatAbortedError extends Error {
   constructor(assistantMessageId: string) {
     super(`Chat generation aborted: ${assistantMessageId}`);
-    this.name = 'ChatAbortedError';
+    this.name = "ChatAbortedError";
   }
 }

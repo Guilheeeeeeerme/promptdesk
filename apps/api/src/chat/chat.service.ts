@@ -74,6 +74,8 @@ export class ChatService {
     lastError: string | null;
     model: string | null;
     provider?: string | null;
+    guidelineVersionId?: string | null;
+    guidelineVersionHash?: string | null;
     conversationId?: string | null;
     createdAt: Date;
     companyId: string;
@@ -88,6 +90,8 @@ export class ChatService {
       lastError: message.lastError,
       model: message.model,
       provider: message.provider ?? null,
+      guidelineVersionId: message.guidelineVersionId ?? null,
+      guidelineVersionHash: message.guidelineVersionHash ?? null,
       conversationId: message.conversationId ?? null,
       createdAt: message.createdAt,
       companyId: message.companyId,

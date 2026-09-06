@@ -15,6 +15,8 @@ export interface Company {
   currentVersion?: number | null;
   hasGuidelines?: boolean;
   messageCount?: number;
+  latestValidVersion?: number | null;
+  latestValidVersionHash?: string | null;
 }
 
 export interface CompanyDetail extends Company {
@@ -28,7 +30,17 @@ export interface GuidelineVersionMeta {
   contentHash: string;
   byteSize?: number | null;
   createdAt: string;
+  status: GuidelineValidationStatus;
+  validationReason?: string | null;
+  validationStartedAt?: string | null;
+  validatedAt?: string | null;
 }
+
+export type GuidelineValidationStatus =
+  | 'pending'
+  | 'valid'
+  | 'invalid'
+  | 'provider_error';
 
 export interface UserView {
   id: string;

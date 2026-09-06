@@ -35,6 +35,8 @@ async function ensureInitialGuidelineVersion(
       fileName,
       contentHash: createHash('sha256').update(buffer).digest('hex'),
       byteSize: buffer.byteLength,
+      status: 'valid',
+      validatedAt: new Date(),
     },
   });
 

@@ -1,4 +1,5 @@
 export const CHAT_GENERATE_QUEUE = 'chat-generate';
+export const GUIDELINE_VALIDATE_QUEUE = 'guideline-validate';
 export const CHAT_EVENTS_CHANNEL = 'chat:events';
 
 /** Redis abort flag TTL (seconds). Covers long LLM calls + retries. */
@@ -40,6 +41,8 @@ export type ChatGenerateJobData = {
   priorAttemptCount?: number;
 };
 
+export type GuidelineValidateJobData = { companyId: string; versionId: string };
+
 export type ChatJobEvent = {
   userId: string;
   assistantMessageId: string;
@@ -80,6 +83,4 @@ export type ChatConversationUpdateEvent = {
 
 /** Anything published on CHAT_EVENTS_CHANNEL. Legacy job events omit type. */
 export type ChatChannelEvent =
-  | ChatAgentMessageEvent
-  | ChatConversationUpdateEvent
-  | ChatJobEvent;
+  ChatAgentMessageEvent | ChatConversationUpdateEvent | ChatJobEvent;

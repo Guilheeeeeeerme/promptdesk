@@ -11,6 +11,12 @@ import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionData, isPlatformRole } from '../auth/session.types';
 import { RedisService } from '../redis/redis.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import {
+  GUIDELINE_VALIDATE_QUEUE,
+  type GuidelineValidateJobData,
+} from '../chat/chat.constants';
 
 const MAX_GUIDELINE_BYTES = 10 * 1024 * 1024; // 10MB, matches boilerplate
 const GUIDELINE_UPLOAD_LIMIT = 10;
@@ -24,6 +30,8 @@ export type CompanyListItem = {
   currentVersion: number | null;
   hasGuidelines: boolean;
   messageCount: number;
+  latestValidVersion: number | null;
+  latestValidVersionHash: string | null;
 };
 
 export type GuidelineVersionMeta = {
@@ -33,6 +41,10 @@ export type GuidelineVersionMeta = {
   contentHash: string;
   byteSize: number | null;
   createdAt: Date;
+  status: string;
+  validationReason: string | null;
+  validationStartedAt: Date | null;
+  validatedAt: Date | null;
 };
 
 export type GuidelineVersionDetail = GuidelineVersionMeta & {
@@ -56,6 +68,8 @@ export class CompaniesService {
     private readonly prisma: PrismaService,
     private readonly chatPrisma: ChatPrismaService,
     private readonly redis: RedisService,
+    @InjectQueue(GUIDELINE_VALIDATE_QUEUE)
+    private readonly guidelineQueue?: Queue<GuidelineValidateJobData>,
   ) {}
 
   private async enforceUploadRateLimit(
@@ -75,6 +89,29 @@ export class CompaniesService {
 
   private async messageCountFor(companyId: string): Promise<number> {
     return this.chatPrisma.chatMessage.count({ where: { companyId } });
+  }
+
+  private selectNewestValidVersion<
+    T extends { version: number; status: string },
+  >(versions: T[]): T | null {
+    return (
+      versions
+        .filter((version) => version.status === 'valid')
+        .sort((a, b) => b.version - a.version)[0] ?? null
+    );
+  }
+
+  private preserveActiveOnFailure<T>(active: T, replacement: unknown): T {
+    return active;
+  }
+
+  private async latestValidVersion(companyId: string) {
+    if (!this.prisma.guidelineVersion?.findFirst) return null;
+    return this.prisma.guidelineVersion.findFirst({
+      where: { companyId, status: 'valid' },
+      orderBy: { version: 'desc' },
+      select: { version: true, contentHash: true },
+    });
   }
 
   private async messageCountsByCompany(
@@ -117,6 +154,14 @@ export class CompaniesService {
       companies.map((c) => c.id),
     );
 
+    const latest = await Promise.all(
+      companies.map(
+        async (company) =>
+          [company.id, await this.latestValidVersion(company.id)] as const,
+      ),
+    );
+    const latestByCompany = new Map(latest);
+
     return companies.map((company) => ({
       id: company.id,
       name: company.name,
@@ -126,6 +171,9 @@ export class CompaniesService {
       currentVersion: company.currentGuidelineVersion?.version ?? null,
       hasGuidelines: Boolean(company.guidelineText),
       messageCount: counts.get(company.id) ?? 0,
+      latestValidVersion: latestByCompany.get(company.id)?.version ?? null,
+      latestValidVersionHash:
+        latestByCompany.get(company.id)?.contentHash ?? null,
     }));
   }
 
@@ -158,15 +206,15 @@ export class CompaniesService {
       currentVersion: company.currentGuidelineVersion?.version ?? null,
       hasGuidelines: Boolean(company.guidelineText),
       guidelineText: company.guidelineText,
-      messageCount: await this.messageCountFor(company.id),
+      messageCount: await this.messageCountFor(companyId),
+      latestValidVersion:
+        (await this.latestValidVersion(company.id))?.version ?? null,
+      latestValidVersionHash:
+        (await this.latestValidVersion(company.id))?.contentHash ?? null,
     };
   }
 
-  async create(
-    session: SessionData,
-    name: string,
-    file?: Express.Multer.File,
-  ) {
+  async create(session: SessionData, name: string, file?: Express.Multer.File) {
     if (!isPlatformRole(session.role)) {
       throw new ForbiddenException('Only root and admin can create companies');
     }
@@ -202,6 +250,8 @@ export class CompaniesService {
               fileName: guideline.fileName,
               ...hashGuidelineContent(guideline.text),
               createdById: session.userId,
+              status: 'valid',
+              validatedAt: new Date(),
             },
           });
 
@@ -242,7 +292,9 @@ export class CompaniesService {
         'code' in error &&
         (error as { code: string }).code === 'P2002'
       ) {
-        throw new BadRequestException('A company with that name already exists');
+        throw new BadRequestException(
+          'A company with that name already exists',
+        );
       }
       throw error;
     }
@@ -257,7 +309,7 @@ export class CompaniesService {
     await this.enforceUploadRateLimit(session, companyId);
     const guideline = this.parseGuidelineFile(file);
 
-    const company = await this.prisma.$transaction(async (tx) => {
+    const version = await this.prisma.$transaction(async (tx) => {
       const last = await tx.guidelineVersion.findFirst({
         where: { companyId },
         orderBy: { version: 'desc' },
@@ -272,39 +324,99 @@ export class CompaniesService {
           fileName: guideline.fileName,
           ...hashGuidelineContent(guideline.text),
           createdById: session.userId,
+          status: 'pending',
+          validationStartedAt: new Date(),
         },
       });
-
-      return tx.company.update({
-        where: { id: companyId },
-        data: {
-          guidelineText: guideline.text,
-          guidelineFileName: guideline.fileName,
-          guidelineUpdatedAt: new Date(),
-          currentGuidelineVersionId: version.id,
-        },
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          guidelineFileName: true,
-          guidelineUpdatedAt: true,
-          guidelineText: true,
-          currentGuidelineVersion: { select: { version: true } },
-        },
-      });
+      return version;
     });
 
+    await this.enqueueValidation(companyId, version.id);
+    const current = await this.getOne(session, companyId);
     return {
-      id: company.id,
-      name: company.name,
-      createdAt: company.createdAt,
-      guidelineFileName: company.guidelineFileName,
-      guidelineUpdatedAt: company.guidelineUpdatedAt,
-      currentVersion: company.currentGuidelineVersion?.version ?? null,
-      hasGuidelines: Boolean(company.guidelineText),
-      messageCount: await this.messageCountFor(company.id),
+      ...current,
+      pendingVersion: version.version,
+      validationStatus: 'pending',
     };
+  }
+
+  async enqueueValidationForVersion(
+    session: SessionData,
+    companyId: string,
+    versionId: string,
+  ) {
+    await this.assertCanManage(session, companyId);
+    const version = await this.prisma.guidelineVersion.findFirst({
+      where: { id: versionId, companyId },
+      select: { id: true, status: true },
+    });
+    if (!version) throw new NotFoundException('Guideline version not found');
+    await this.enqueueValidation(companyId, version.id);
+    return { versionId: version.id, status: version.status };
+  }
+
+  private async enqueueValidation(companyId: string, versionId: string) {
+    if (!this.guidelineQueue) return;
+    await this.guidelineQueue.add(
+      'validate',
+      { companyId, versionId },
+      {
+        jobId: `guideline-validate:${versionId}`,
+        removeOnComplete: 100,
+        removeOnFail: 200,
+      },
+    );
+  }
+
+  /** Records asynchronous validator output and activates only a valid version. */
+  async recordGuidelineValidation(
+    companyId: string,
+    versionId: string,
+    status: 'valid' | 'invalid' | 'provider_error',
+    reason?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const version = await tx.guidelineVersion.findFirst({
+        where: { id: versionId, companyId },
+      });
+      if (!version) throw new NotFoundException('Guideline version not found');
+
+      const validatedAt = new Date();
+      await tx.guidelineVersion.update({
+        where: { id: versionId },
+        data: {
+          status,
+          validationReason: reason ?? null,
+          validatedAt,
+        },
+      });
+
+      if (status !== 'valid') {
+        return this.preserveActiveOnFailure(null, {
+          ...version,
+          status,
+          validationReason: reason ?? null,
+          validatedAt,
+        });
+      }
+
+      const newest = await tx.guidelineVersion.findFirst({
+        where: { companyId, status: 'valid' },
+        orderBy: { version: 'desc' },
+      });
+      if (!newest) return version;
+
+      await tx.company.update({
+        where: { id: companyId },
+        data: {
+          guidelineText: newest.content,
+          guidelineFileName: newest.fileName,
+          guidelineUpdatedAt: validatedAt,
+          currentGuidelineVersionId: newest.id,
+        },
+      });
+      return newest;
+    });
   }
 
   async deleteGuidelines(session: SessionData, companyId: string) {
@@ -358,6 +470,10 @@ export class CompaniesService {
         contentHash: true,
         byteSize: true,
         createdAt: true,
+        status: true,
+        validationReason: true,
+        validationStartedAt: true,
+        validatedAt: true,
       },
     });
   }
@@ -378,6 +494,10 @@ export class CompaniesService {
         contentHash: true,
         byteSize: true,
         createdAt: true,
+        status: true,
+        validationReason: true,
+        validationStartedAt: true,
+        validatedAt: true,
         content: true,
       },
     });
