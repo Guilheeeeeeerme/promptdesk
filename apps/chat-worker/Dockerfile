@@ -13,6 +13,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /build/apps/chat-worker/node_modules ./node_modules
 COPY --from=build /build/apps/chat-worker/dist ./dist
+COPY --from=build /build/apps/chat-worker/prompts ./prompts
 COPY --from=build /build/apps/chat-worker/prisma-core ./prisma-core
 COPY --from=build /build/apps/chat-worker/prisma-chat ./prisma-chat
 EXPOSE 3001

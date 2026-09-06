@@ -1,5 +1,7 @@
 /** Shared placeholder context + post-LLM substitution (guideline tokens). */
 
+import { renderPrompt } from './prompt-registry';
+
 export type PlaceholderValues = {
   customerName: string;
   companyName: string;
@@ -97,7 +99,6 @@ export function applyPlaceholders(
 /** Prompt block: tell the model never to leave bracket tokens. */
 export function buildPlaceholderPromptBlock(values: PlaceholderValues): string {
   const lines = [
-    'Known context (use only these values; NEVER leave square-bracket placeholders such as [Name], [Customer Name], [Company], [Company Name], [Date], or [Today] in your reply):',
     `- Company name: ${values.companyName}`,
     `- Agent name: ${values.agentName}`,
   ];
@@ -110,8 +111,7 @@ export function buildPlaceholderPromptBlock(values: PlaceholderValues): string {
     lines.push(`- Agent email: ${values.agentEmail}`);
   }
   lines.push(`- Today's date: ${values.date}`);
-  lines.push(
-    'If a detail is not listed above, write a natural sentence without inventing bracket tokens like [Service] or [Plan Name].',
-  );
-  return lines.join('\n');
+  return renderPrompt('support.placeholders.known_context', {
+    known_context: lines.join('\n'),
+  });
 }

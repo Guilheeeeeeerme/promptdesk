@@ -313,6 +313,9 @@ export function ChatPage() {
     const generation = ++listGenerationRef.current;
     const companyAtStart = activeCompanyIdRef.current;
     const params = new URLSearchParams();
+    // Support is an individual workspace, even when the logged-in user has a
+    // platform role. The main app intentionally omits this scope.
+    params.set('scope', 'mine');
     if (statusFilter) params.set('status', statusFilter);
     if (pinnedOnly) params.set('pinned', 'true');
     params.set('archived', showArchived ? 'true' : 'false');
@@ -649,7 +652,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-gray-50 overflow-x-hidden">
+    <div className="h-dvh flex flex-col bg-gray-50 overflow-hidden">
       <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14 sm:h-16 gap-3">
@@ -699,7 +702,7 @@ export function ChatPage() {
         </div>
       </nav>
 
-      <main className="flex-1 flex flex-col min-h-0 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
         <div className="mb-3 sm:mb-4 shrink-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
             Support Chat
@@ -709,7 +712,7 @@ export function ChatPage() {
           </p>
         </div>
 
-        <div className="relative flex-1 flex gap-4 min-h-0 h-[min(40rem,calc(100dvh-9.5rem))] sm:h-[min(42rem,calc(100dvh-10.5rem))]">
+        <div className="relative flex-1 flex gap-4 min-h-0 overflow-hidden">
           {sidebarOpen && (
             <button
               type="button"

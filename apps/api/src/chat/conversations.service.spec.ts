@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   ConversationStatus,
   MessageRole,
@@ -119,6 +123,22 @@ describe('ConversationsService history visibility', () => {
       }),
     );
     expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+
+  it('forces platform roles to their own threads for the support scope', async () => {
+    await conversations.list(session('admin', ownerId), { scope: 'mine' });
+
+    expect(chatPrisma.conversation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: ownerId }),
+      }),
+    );
+  });
+
+  it('rejects unknown conversation scopes', async () => {
+    await expect(
+      conversations.list(session('admin'), { scope: 'other' as never }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('allows managers to detail and read messages owned by another agent in the active company', async () => {

@@ -109,7 +109,9 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
           [...DEFAULT_GEMINI_RANK],
         ),
         { ...SEED_GEMINI_INPUT_USD, ...geminiParsed },
-        (id) => /gemini/i.test(id) && !/embed|image|tts|aqa|computer/i.test(id),
+        (id) =>
+          /^gemini-\d/.test(id) &&
+          !/embed|image|tts|aqa|computer/i.test(id),
         [...DEFAULT_GEMINI_RANK],
       );
 
@@ -227,6 +229,9 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
           (m.supportedGenerationMethods ?? []).includes('generateContent'),
         )
         .map((m) => (m.name ?? '').replace(/^models\//, ''))
+        // The Gemini API also exposes non-generative service identifiers;
+        // only model IDs can be passed to generateContent.
+        .filter((id) => /^gemini-\d/.test(id))
         .filter(Boolean);
     } catch (err) {
       this.logger.warn(
