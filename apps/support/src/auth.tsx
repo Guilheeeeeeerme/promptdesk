@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -14,6 +15,11 @@ import {
   type SessionPayload,
 } from '@shared/auth';
 import { apiFetch, clearToken, getToken, MAIN_ORIGIN } from './api';
+import {
+  FOCUS_REFRESH_DEDUPE_MS,
+  HIDDEN_SESSION_REFRESH_MS,
+  VISIBLE_SESSION_REFRESH_MS,
+} from './polling';
 
 interface AuthContextValue {
   session: SessionPayload | null;
@@ -35,9 +41,12 @@ let skipHandoffOnce = false;
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const refreshTimerRef = useRef<number | null>(null);
+  const lastRefreshAtRef = useRef(0);
 
   const refreshSession = useCallback(async () => {
     const data = await getSession(API_BASE);
+    lastRefreshAtRef.current = Date.now();
     setSession(data);
   }, []);
 
@@ -72,39 +81,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, [refreshSession]);
 
-  // Poll Redis session so Main company switches appear even in a split view
-  // (visibility/focus events often do not fire when both panes stay visible).
+  // Poll Redis session so Main company switches appear even in a split view.
+  // Use a slower adaptive timer because focus/visibility events handle the
+  // interactive case immediately.
   useEffect(() => {
     if (loading || !session) return;
 
-    const id = window.setInterval(() => {
-      if (!getToken()) return;
-      void refreshSession().catch(() => {
-        clearToken();
-        redirectToSsoHandoff(MAIN_ORIGIN, window.location.href);
-      });
-    }, 2000);
+    let cancelled = false;
 
-    return () => window.clearInterval(id);
-  }, [loading, session, refreshSession]);
-
-  // Same token updated on Main → also refresh when this tab is focused.
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState !== 'visible') return;
-      if (!getToken()) return;
-      void refreshSession().catch(() => {
-        clearToken();
-        redirectToSsoHandoff(MAIN_ORIGIN, window.location.href);
-      });
-    }
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
+    const scheduleRefresh = () => {
+      if (cancelled) return;
+      refreshTimerRef.current = window.setTimeout(async () => {
+        if (!getToken()) return;
+        try {
+          await refreshSession();
+        } catch {
+          clearToken();
+          redirectToSsoHandoff(MAIN_ORIGIN, window.location.href);
+          return;
+        }
+        scheduleRefresh();
+      }, document.visibilityState === 'visible'
+        ? VISIBLE_SESSION_REFRESH_MS
+        : HIDDEN_SESSION_REFRESH_MS);
     };
-  }, [refreshSession]);
+
+    const refreshOnActivity = () => {
+      if (document.visibilityState !== 'visible' || !getToken()) return;
+      if (Date.now() - lastRefreshAtRef.current < FOCUS_REFRESH_DEDUPE_MS) return;
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+      }
+      lastRefreshAtRef.current = Date.now();
+      void refreshSession().catch(() => {
+        clearToken();
+        redirectToSsoHandoff(MAIN_ORIGIN, window.location.href);
+      });
+      scheduleRefresh();
+    };
+
+    const onVisibilityChange = () => {
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+      }
+      if (document.visibilityState === 'visible') {
+        refreshOnActivity();
+        if (refreshTimerRef.current === null) scheduleRefresh();
+      } else {
+        scheduleRefresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', refreshOnActivity);
+    scheduleRefresh();
+
+    return () => {
+      cancelled = true;
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', refreshOnActivity);
+    };
+  }, [loading, session?.activeCompany?.id, refreshSession]);
 
   const logout = useCallback(async () => {
     try {

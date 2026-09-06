@@ -309,9 +309,10 @@ export function ChatPage() {
   }, [searchInput]);
 
   const loadConversations = useCallback(async () => {
-    if (!session) return;
+    const activeCompanyId = session?.activeCompany?.id ?? null;
+    if (!activeCompanyId) return;
     const generation = ++listGenerationRef.current;
-    const companyAtStart = activeCompanyIdRef.current;
+    const companyAtStart = activeCompanyId;
     const params = new URLSearchParams();
     // Support is an individual workspace, even when the logged-in user has a
     // platform role. The main app intentionally omits this scope.
@@ -334,7 +335,7 @@ export function ChatPage() {
     setConversations(
       [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned)),
     );
-  }, [session, statusFilter, pinnedOnly, showArchived, search]);
+  }, [session?.activeCompany?.id, statusFilter, pinnedOnly, showArchived, search]);
 
   useEffect(() => {
     listGenerationRef.current += 1;
