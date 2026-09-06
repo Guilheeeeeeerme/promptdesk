@@ -13,7 +13,10 @@ import { SessionData, isPlatformRole } from '../auth/session.types';
 import { RedisService } from '../redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { GUIDELINE_VALIDATE_QUEUE, type GuidelineValidateJobData } from '../chat/chat.constants';
+import {
+  GUIDELINE_VALIDATE_QUEUE,
+  type GuidelineValidateJobData,
+} from '../chat/chat.constants';
 
 const MAX_GUIDELINE_BYTES = 10 * 1024 * 1024; // 10MB, matches boilerplate
 const GUIDELINE_UPLOAD_LIMIT = 10;
@@ -88,10 +91,14 @@ export class CompaniesService {
     return this.chatPrisma.chatMessage.count({ where: { companyId } });
   }
 
-  private selectNewestValidVersion<T extends { version: number; status: string }>(versions: T[]): T | null {
-    return versions
-      .filter((version) => version.status === 'valid')
-      .sort((a, b) => b.version - a.version)[0] ?? null;
+  private selectNewestValidVersion<
+    T extends { version: number; status: string },
+  >(versions: T[]): T | null {
+    return (
+      versions
+        .filter((version) => version.status === 'valid')
+        .sort((a, b) => b.version - a.version)[0] ?? null
+    );
   }
 
   private preserveActiveOnFailure<T>(active: T, replacement: unknown): T {
@@ -149,7 +156,8 @@ export class CompaniesService {
 
     const latest = await Promise.all(
       companies.map(
-        async (company) => [company.id, await this.latestValidVersion(company.id)] as const,
+        async (company) =>
+          [company.id, await this.latestValidVersion(company.id)] as const,
       ),
     );
     const latestByCompany = new Map(latest);
@@ -206,11 +214,7 @@ export class CompaniesService {
     };
   }
 
-  async create(
-    session: SessionData,
-    name: string,
-    file?: Express.Multer.File,
-  ) {
+  async create(session: SessionData, name: string, file?: Express.Multer.File) {
     if (!isPlatformRole(session.role)) {
       throw new ForbiddenException('Only root and admin can create companies');
     }
@@ -288,7 +292,9 @@ export class CompaniesService {
         'code' in error &&
         (error as { code: string }).code === 'P2002'
       ) {
-        throw new BadRequestException('A company with that name already exists');
+        throw new BadRequestException(
+          'A company with that name already exists',
+        );
       }
       throw error;
     }
@@ -354,7 +360,11 @@ export class CompaniesService {
     await this.guidelineQueue.add(
       'validate',
       { companyId, versionId },
-      { jobId: `guideline-validate:${versionId}`, removeOnComplete: 100, removeOnFail: 200 },
+      {
+        jobId: `guideline-validate:${versionId}`,
+        removeOnComplete: 100,
+        removeOnFail: 200,
+      },
     );
   }
 
@@ -382,10 +392,12 @@ export class CompaniesService {
       });
 
       if (status !== 'valid') {
-        return this.preserveActiveOnFailure(
-          null,
-          { ...version, status, validationReason: reason ?? null, validatedAt },
-        );
+        return this.preserveActiveOnFailure(null, {
+          ...version,
+          status,
+          validationReason: reason ?? null,
+          validatedAt,
+        });
       }
 
       const newest = await tx.guidelineVersion.findFirst({

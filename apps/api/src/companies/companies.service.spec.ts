@@ -27,34 +27,66 @@ describe('CompaniesService safe guideline lifecycle', () => {
     };
     const prisma = {
       company: { findUnique: jest.fn().mockResolvedValue({ id: 'company-1' }) },
-      $transaction: jest.fn(async (callback: (value: typeof tx) => unknown) => callback(tx)),
+      $transaction: jest.fn(async (callback: (value: typeof tx) => unknown) =>
+        callback(tx),
+      ),
     };
-    const chatPrisma = { chatMessage: { count: jest.fn().mockResolvedValue(0) } };
-    const redis = { getClient: () => ({ incr: jest.fn().mockResolvedValue(1), expire: jest.fn() }) };
+    const chatPrisma = {
+      chatMessage: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const redis = {
+      getClient: () => ({
+        incr: jest.fn().mockResolvedValue(1),
+        expire: jest.fn(),
+      }),
+    };
 
-    const service = new CompaniesService(prisma as never, chatPrisma as never, redis as never);
-    await service.uploadGuidelines(session, 'company-1', textFile('replacement policy'));
+    const service = new CompaniesService(
+      prisma as never,
+      chatPrisma as never,
+      redis as never,
+    );
+    await service.uploadGuidelines(
+      session,
+      'company-1',
+      textFile('replacement policy'),
+    );
 
     expect(tx.guidelineVersion.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'pending' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'pending' }),
+      }),
     );
     expect(tx.company.update).not.toHaveBeenCalled();
   });
 
   it('preserves the active version when a replacement fails validation', async () => {
-    const result = await (new CompaniesService({} as never, {} as never, {} as never) as never as {
-      preserveActiveOnFailure: (active: unknown, replacement: unknown) => unknown;
-    }).preserveActiveOnFailure(
+    const result = await (
+      new CompaniesService({} as never, {} as never, {} as never) as never as {
+        preserveActiveOnFailure: (
+          active: unknown,
+          replacement: unknown,
+        ) => unknown;
+      }
+    ).preserveActiveOnFailure(
       { id: 'version-3', status: 'valid' },
       { id: 'version-4', status: 'invalid' },
     );
 
-    expect(result).toEqual(expect.objectContaining({ id: 'version-3', status: 'valid' }));
+    expect(result).toEqual(
+      expect.objectContaining({ id: 'version-3', status: 'valid' }),
+    );
   });
 
   it('selects the newest valid version, ignoring pending and failed versions', async () => {
-    const service = new CompaniesService({} as never, {} as never, {} as never) as never as {
-      selectNewestValidVersion: (versions: Array<{ version: number; status: string }>) => unknown;
+    const service = new CompaniesService(
+      {} as never,
+      {} as never,
+      {} as never,
+    ) as never as {
+      selectNewestValidVersion: (
+        versions: Array<{ version: number; status: string }>,
+      ) => unknown;
     };
 
     expect(

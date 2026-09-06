@@ -33,3 +33,13 @@ build passed.
 ## Commit
 
 Pending: `feat: add validated guideline lifecycle`
+
+## Follow-up: executable validation path
+
+- Added `guideline-validate` queue registration to API and worker.
+- Uploads enqueue validation automatically; managers/admins can retry through
+  `POST /companies/:id/guidelines/versions/:versionId/validate`.
+- Added provider-backed `validateGuideline` operations to Gemini/OpenAI and a
+  worker processor that persists terminal status/reason/timestamp and activates
+  only the newest valid version. Malicious deterministic results are persisted
+  as `invalid` because the database lifecycle intentionally has four states.

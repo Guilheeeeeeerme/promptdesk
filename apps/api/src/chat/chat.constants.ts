@@ -83,6 +83,4 @@ export type ChatConversationUpdateEvent = {
 
 /** Anything published on CHAT_EVENTS_CHANNEL. Legacy job events omit type. */
 export type ChatChannelEvent =
-  | ChatAgentMessageEvent
-  | ChatConversationUpdateEvent
-  | ChatJobEvent;
+  ChatAgentMessageEvent | ChatConversationUpdateEvent | ChatJobEvent;

@@ -6,7 +6,10 @@ import { CompaniesController } from './companies.controller';
 import { CompaniesService } from './companies.service';
 
 @Module({
-  imports: [AuthModule, BullModule.registerQueue({ name: GUIDELINE_VALIDATE_QUEUE })],
+  imports: [
+    AuthModule,
+    BullModule.registerQueue({ name: GUIDELINE_VALIDATE_QUEUE }),
+  ],
   controllers: [CompaniesController],
   providers: [CompaniesService],
   exports: [CompaniesService],
