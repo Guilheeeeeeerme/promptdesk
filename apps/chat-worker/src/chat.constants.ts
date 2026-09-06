@@ -13,6 +13,7 @@ export function chatAbortKey(assistantMessageId: string): string {
 export type ChatProvider = "gemini" | "openai";
 
 export type SupportPromptMode = "agent" | "customer_draft";
+export type SupportLocale = "en-US" | "pt-BR";
 
 export type SupportPromptMessage = {
   role: "agent" | "copilot";
@@ -25,6 +26,7 @@ export function buildSupportPrompt(params: {
   agentRequest: string;
   knownContext: Record<string, string>;
   mode?: SupportPromptMode;
+  locale?: SupportLocale;
 }): { systemInstruction: string; context: string } {
   const outputInstruction = renderPrompt(
     params.mode === "customer_draft"
@@ -35,6 +37,9 @@ export function buildSupportPrompt(params: {
   const systemInstruction = renderPrompt('support.copilot.system', {
     mode_instruction: outputInstruction,
   });
+  const languageInstruction = params.locale === 'pt-BR'
+    ? 'Respond in Brazilian Portuguese (pt-BR).'
+    : 'Respond in English (en-US).';
 
   const payload = {
     KNOWN_CONTEXT: params.knownContext,
@@ -49,7 +54,7 @@ export function buildSupportPrompt(params: {
   };
 
   return {
-    systemInstruction,
+    systemInstruction: `${systemInstruction}\n\n${languageInstruction}`,
     context: renderPrompt('support.copilot.context', {
       payload: JSON.stringify(payload),
     }),
@@ -65,6 +70,7 @@ export type ChatGenerateJobData = {
   conversationId?: string;
   /** Primary Gemini; failover re-enqueues with openai. */
   provider?: ChatProvider;
+  locale?: SupportLocale;
   /** Attempts already spent on prior provider(s) before this job. */
   priorAttemptCount?: number;
   /** Defaults to internal guidance; customer-ready copy requires explicit mode. */

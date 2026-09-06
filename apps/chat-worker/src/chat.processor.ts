@@ -228,6 +228,7 @@ export class ChatGenerateProcessor extends WorkerHost {
         placeholders,
         mode: job.data.mode ?? ('agent' as const),
         model,
+        locale: job.data.locale ?? 'en-US',
       };
 
       const rawReply =

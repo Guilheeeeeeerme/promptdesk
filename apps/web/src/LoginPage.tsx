@@ -7,9 +7,11 @@ import {
 } from '@shared/auth';
 import { getAllowedReturnOrigins } from './api';
 import { useAuth } from './auth';
+import { useLocale } from './locale';
 
 export function LoginPage() {
   const { session, loading, login } = useAuth();
+  const { t } = useLocale();
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
   const [email, setEmail] = useState('');
@@ -64,7 +66,7 @@ export function LoginPage() {
     <div className="min-h-dvh bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-x-hidden">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h1 className="text-center text-3xl font-bold text-indigo-600">
-          AI Support Assistant
+          {t('AI Support Assistant')}
         </h1>
         <p className="mt-2 text-center text-sm text-gray-600">
           {validReturnUrl ? 'Sign in to continue' : 'Sign in to your account'}

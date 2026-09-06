@@ -83,6 +83,15 @@ export class AuthService {
     return this.buildAuthResponse(token, updated);
   }
 
+  async updateLocale(token: string, session: SessionData, locale: 'en-US' | 'pt-BR') {
+    const user = await this.prisma.user.update({
+      where: { id: session.userId },
+      data: { locale },
+    });
+    if (!user) throw new UnauthorizedException('User no longer exists');
+    return this.buildAuthResponse(token, session);
+  }
+
   private async buildAuthResponse(
     token: string | null,
     session: SessionData,
@@ -111,6 +120,7 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
+        locale: user.locale === 'pt-BR' ? 'pt-BR' : user.locale === 'en-US' ? 'en-US' : null,
       },
       activeCompany,
     };

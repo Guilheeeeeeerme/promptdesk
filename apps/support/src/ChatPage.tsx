@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { io, type Socket } from 'socket.io-client';
 import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
 import { useAuth } from './auth';
+import { useLocale } from './locale';
 
 type MessageStatus =
   | 'completed'
@@ -173,13 +174,9 @@ function toBubble(m: {
   };
 }
 
-function formatWhen(value: string | null): string {
-  if (!value) return '—';
-  return new Date(value).toLocaleString();
-}
-
 export function ChatPage() {
   const { session, loading, logout } = useAuth();
+  const { locale, setLocale, t, formatDate } = useLocale();
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatBubble[]>([]);
@@ -659,10 +656,10 @@ export function ChatPage() {
           <div className="flex justify-between h-14 sm:h-16 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <h1 className="text-lg sm:text-xl font-bold text-indigo-600 truncate">
-                AI Support Assistant
+                {t('AI Support Assistant')}
               </h1>
               <span className="hidden sm:inline-flex border-indigo-500 text-gray-900 items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                Chat
+                {t('Chat')}
               </span>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -687,13 +684,15 @@ export function ChatPage() {
                     <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
                       {session.user.email}
                     </div>
+                    <label className="block px-3 pt-2 text-xs text-gray-500" htmlFor="support-language-select">{t('Language')}</label>
+                    <select id="support-language-select" value={locale} onChange={(e) => void setLocale(e.target.value as typeof locale)} className="mx-3 my-1 w-[calc(100%-1.5rem)] rounded border border-gray-300 px-2 py-1 text-sm"><option value="en-US">English</option><option value="pt-BR">Português (Brasil)</option></select>
                     <button
                       type="button"
                       role="menuitem"
                       onClick={() => void logout()}
                       className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
                     >
-                      Log out
+                      {t('Log out')}
                     </button>
                   </div>
                 )}
@@ -706,10 +705,10 @@ export function ChatPage() {
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
         <div className="mb-3 sm:mb-4 shrink-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-            Support Chat
+            {t('Support Chat')}
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Recommend replies using your company guidelines
+            {t('Recommend replies using your company guidelines')}
           </p>
         </div>
 
@@ -732,14 +731,14 @@ export function ChatPage() {
             }`}
           >
             <div className="px-3 pt-3 flex items-center justify-between gap-2 md:hidden">
-              <p className="text-sm font-semibold text-gray-900">Conversations</p>
+              <p className="text-sm font-semibold text-gray-900">{t('Conversations')}</p>
               <button
                 type="button"
                 onClick={closeSidebar}
                 className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
                 aria-label="Close conversations menu"
               >
-                Close
+                {t('Close')}
               </button>
             </div>
             <div className="px-3 pt-3">
@@ -748,12 +747,12 @@ export function ChatPage() {
                 onClick={startNewChat}
                 className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
               >
-                New chat
+                {t('New chat')}
               </button>
               <input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search chats…"
+                placeholder={t('Search chats…')}
                 className="mt-3 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500"
               />
               <div className="mt-2 flex items-center gap-2">
@@ -762,10 +761,10 @@ export function ChatPage() {
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="flex-1 min-w-0 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
                   >
-                    <option value="">All statuses</option>
+                    <option value="">{t('All statuses')}</option>
                     {ALL_CONVERSATION_STATUSES.map((s) => (
                       <option key={s} value={s}>
-                        {STATUS_LABELS[s]}
+                        {t(STATUS_LABELS[s])}
                       </option>
                     ))}
                   </select>
@@ -822,10 +821,10 @@ export function ChatPage() {
                         <span
                           className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_BADGES[c.status]}`}
                         >
-                          {STATUS_LABELS[c.status]}
+                        {t(STATUS_LABELS[c.status])}
                         </span>
                         <span className="text-[10px] text-gray-400 truncate">
-                          {formatWhen(c.lastMessageAt ?? c.createdAt)}
+                          {formatDate(c.lastMessageAt ?? c.createdAt)}
                         </span>
                       </div>
                     </button>

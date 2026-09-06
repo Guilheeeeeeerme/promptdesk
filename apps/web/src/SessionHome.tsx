@@ -1,7 +1,9 @@
 import { useAuth } from './auth';
+import { useLocale } from './locale';
 
 export function SessionHome() {
   const { session } = useAuth();
+  const { t } = useLocale();
 
   if (!session) {
     return null;
@@ -10,28 +12,28 @@ export function SessionHome() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Home</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t('Home')}</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Signed in to the AI Support Assistant
+          {t('Signed in to the AI Support Assistant')}
         </p>
       </div>
 
       <div className="bg-white shadow rounded-lg p-6 space-y-6">
         <div>
-          <h2 className="text-sm font-medium text-gray-500">User</h2>
+          <h2 className="text-sm font-medium text-gray-500">{t('User')}</h2>
           <p className="mt-1 text-gray-900">{session.user.name}</p>
           <p className="text-sm text-gray-600">{session.user.email}</p>
           <p className="mt-1 text-sm text-gray-600 capitalize">
-            Role: {session.user.role}
+            {t('Role')}: {t(session.user.role)}
           </p>
         </div>
 
         <div>
-          <h2 className="text-sm font-medium text-gray-500">Active company</h2>
+          <h2 className="text-sm font-medium text-gray-500">{t('Active company')}</h2>
           {session.activeCompany ? (
             <p className="mt-1 text-gray-900">{session.activeCompany.name}</p>
           ) : (
-            <p className="mt-1 text-gray-500">None selected</p>
+            <p className="mt-1 text-gray-500">{t('None selected')}</p>
           )}
           {session.user.role === 'root' || session.user.role === 'admin' ? (
             <p className="mt-2 text-xs text-gray-500">

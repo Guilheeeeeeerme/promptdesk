@@ -27,6 +27,7 @@ export function chatIdemKey(
 }
 
 export type ChatProvider = 'gemini' | 'openai';
+export type ChatLocale = 'en-US' | 'pt-BR';
 
 export type ChatGenerateJobData = {
   assistantMessageId: string;
@@ -37,6 +38,7 @@ export type ChatGenerateJobData = {
   conversationId?: string;
   /** Primary Gemini; failover re-enqueues with openai. */
   provider?: ChatProvider;
+  locale?: ChatLocale;
   /** Attempts already spent on prior provider(s) before this job. */
   priorAttemptCount?: number;
 };

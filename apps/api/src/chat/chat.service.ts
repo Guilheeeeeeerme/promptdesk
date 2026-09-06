@@ -430,6 +430,7 @@ export class ChatService {
           userId: session.userId,
           conversationId: conversation.id,
           provider: 'gemini',
+          locale: user.locale === 'pt-BR' ? 'pt-BR' : 'en-US',
         });
       } catch (enqueueError) {
         await this.markEnqueueFailure(
@@ -627,6 +628,7 @@ export class ChatService {
       userId: session.userId,
       conversationId: message.conversationId ?? undefined,
       provider: 'gemini',
+      locale: (await this.prisma.user.findUnique({ where: { id: session.userId }, select: { locale: true } }))?.locale === 'pt-BR' ? 'pt-BR' : 'en-US',
     }, `chat-gen-${updated.id}-gemini-retry-${Date.now()}`);
 
     return {

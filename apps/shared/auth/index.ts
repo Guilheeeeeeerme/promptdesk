@@ -1,5 +1,54 @@
 export const TOKEN_KEY = 'session_token';
 
+export const SUPPORTED_LOCALES = ['en-US', 'pt-BR'] as const;
+export type Locale = (typeof SUPPORTED_LOCALES)[number];
+export const DEFAULT_LOCALE: Locale = 'en-US';
+
+export function isLocale(value: unknown): value is Locale {
+  return SUPPORTED_LOCALES.includes(value as Locale);
+}
+
+export function detectLocale(
+  languages: readonly string[] =
+    typeof navigator === 'undefined' ? [] : navigator.languages,
+): Locale {
+  return languages.some((language) => language.toLowerCase() === 'pt-br')
+    ? 'pt-BR'
+    : DEFAULT_LOCALE;
+}
+
+const PT_BR: Record<string, string> = {
+  Home: 'Início', History: 'Histórico', Companies: 'Empresas', Users: 'Usuários',
+  Chat: 'Chat', Company: 'Empresa', Menu: 'Menu', Close: 'Fechar', 'Log out': 'Sair',
+  'AI Support Assistant': 'Assistente de Suporte com IA', Loading: 'Carregando',
+  'Loading session…': 'Carregando sessão…', 'Signed in to the AI Support Assistant': 'Sessão iniciada no Assistente de Suporte com IA',
+  User: 'Usuário', Role: 'Função', 'Active company': 'Empresa ativa', None: 'Nenhuma',
+  'None selected': 'Nenhuma selecionada', 'New chat': 'Novo chat', Conversations: 'Conversas',
+  Detail: 'Detalhes', Search: 'Pesquisar', Send: 'Enviar', 'Send…': 'Enviando…',
+  'New conversation': 'Nova conversa', 'No messages.': 'Nenhuma mensagem.',
+  'No messages in this conversation yet.': 'Ainda não há mensagens nesta conversa.',
+  'All statuses': 'Todos os status', Open: 'Aberta', Solved: 'Resolvida',
+  'Not solved': 'Não resolvida', Pending: 'Pendente',
+  Processing: 'Processando', Valid: 'Válida', Invalid: 'Inválida', Cancelled: 'Cancelada',
+  'Provider error': 'Erro do provedor', 'Language': 'Idioma', English: 'English',
+  'Português (Brasil)': 'Português (Brasil)', Portuguese: 'Português',
+  'Support Chat': 'Chat de Suporte', 'Recommend replies using your company guidelines': 'Recomende respostas usando as diretrizes da sua empresa',
+  'Search chats…': 'Pesquisar conversas…', 'Pinned': 'Fixada', 'Archived': 'Arquivadas',
+  'No conversations yet.': 'Nenhuma conversa ainda.', 'Untitled chat': 'Conversa sem título',
+  'Main navigation': 'Navegação principal', 'Chat (opens in new tab)': 'Chat (abre em nova aba)',
+  agent: 'agente', admin: 'administrador', manager: 'gerente', root: 'raiz',
+};
+
+export function translate(value: string, locale: Locale): string {
+  return locale === 'pt-BR' ? PT_BR[value] ?? value : value;
+}
+
+export function formatLocaleDate(value: string | Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  }).format(typeof value === 'string' ? new Date(value) : value);
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -94,6 +143,7 @@ export interface SessionUser {
   email: string;
   name: string;
   role: Role;
+  locale?: Locale | null;
 }
 
 export interface SessionPayload {
