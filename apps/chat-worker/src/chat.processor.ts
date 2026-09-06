@@ -211,9 +211,13 @@ export class ChatGenerateProcessor extends WorkerHost {
 
       const genParams = {
         guidelines: bounded.guidelines || null,
-        history: bounded.history,
+        history: bounded.history.map((message) => ({
+          role: message.role === 'user' ? ('agent' as const) : ('copilot' as const),
+          content: message.content,
+        })),
         userMessage: bounded.userMessage,
         placeholders,
+        mode: job.data.mode ?? ('agent' as const),
         model,
       };
 

@@ -14,7 +14,9 @@ import { RedisService } from '../redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
+  CHAT_EVENTS_CHANNEL,
   GUIDELINE_VALIDATE_QUEUE,
+  type GuidelineValidationEvent,
   type GuidelineValidateJobData,
 } from '../chat/chat.constants';
 
@@ -325,7 +327,6 @@ export class CompaniesService {
           ...hashGuidelineContent(guideline.text),
           createdById: session.userId,
           status: 'pending',
-          validationStartedAt: new Date(),
         },
       });
       return version;
@@ -351,8 +352,69 @@ export class CompaniesService {
       select: { id: true, status: true },
     });
     if (!version) throw new NotFoundException('Guideline version not found');
+    if (version.status !== 'pending') {
+      throw new BadRequestException('Only pending versions can be validated');
+    }
     await this.enqueueValidation(companyId, version.id);
     return { versionId: version.id, status: version.status };
+  }
+
+  async cancelGuidelineVersion(
+    session: SessionData,
+    companyId: string,
+    versionId: string,
+  ) {
+    await this.assertCanManage(session, companyId);
+    const version = await this.prisma.guidelineVersion.findFirst({
+      where: { id: versionId, companyId },
+      select: { id: true, companyId: true, version: true, status: true },
+    });
+    if (!version) throw new NotFoundException('Guideline version not found');
+
+    const cancelledAt = new Date();
+    const cancelled = await this.prisma.guidelineVersion.updateMany({
+      where: { id: versionId, companyId, status: 'pending' },
+      data: {
+        status: 'cancelled',
+        validationReason: 'Cancelled by user',
+        validatedAt: cancelledAt,
+      },
+    });
+    if (cancelled.count !== 1) {
+      throw new BadRequestException('Only pending versions can be cancelled');
+    }
+
+    const job = await this.guidelineQueue?.getJob(
+      `guideline-validate-${versionId}`,
+    );
+    if (job) {
+      try {
+        await job.remove();
+      } catch {
+        // The database claim is authoritative; an active/dequeued job will
+        // observe cancelled and stop before calling a provider.
+      }
+    }
+
+    const event: GuidelineValidationEvent = {
+      type: 'guideline_validation',
+      companyId,
+      versionId,
+      version: version.version,
+      status: 'cancelled',
+      reason: 'Cancelled by user',
+      occurredAt: cancelledAt.toISOString(),
+    };
+    await this.redis
+      .getClient()
+      .publish(CHAT_EVENTS_CHANNEL, JSON.stringify(event));
+
+    return {
+      ...version,
+      status: 'cancelled' as const,
+      validationReason: event.reason,
+      validatedAt: cancelledAt,
+    };
   }
 
   private async enqueueValidation(companyId: string, versionId: string) {
@@ -361,7 +423,7 @@ export class CompaniesService {
       'validate',
       { companyId, versionId },
       {
-        jobId: `guideline-validate:${versionId}`,
+        jobId: `guideline-validate-${versionId}`,
         removeOnComplete: 100,
         removeOnFail: 200,
       },
@@ -382,14 +444,15 @@ export class CompaniesService {
       if (!version) throw new NotFoundException('Guideline version not found');
 
       const validatedAt = new Date();
-      await tx.guidelineVersion.update({
-        where: { id: versionId },
+      const applied = await tx.guidelineVersion.updateMany({
+        where: { id: versionId, companyId, status: 'processing' },
         data: {
           status,
           validationReason: reason ?? null,
           validatedAt,
         },
       });
+      if (applied.count !== 1) return version;
 
       if (status !== 'valid') {
         return this.preserveActiveOnFailure(null, {

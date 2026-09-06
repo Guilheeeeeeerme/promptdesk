@@ -22,9 +22,11 @@ enum Role {
 
 enum GuidelineValidationStatus {
   pending
+  processing
   valid
   invalid
   provider_error
+  cancelled
 }
 
 model Company {

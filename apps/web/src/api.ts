@@ -17,6 +17,17 @@ export async function apiFetch<T>(
   return sharedApiFetch<T>(API_BASE, path, options);
 }
 
+export function getApiOrigin(): string {
+  if (API_BASE.startsWith('http')) {
+    return API_BASE.replace(/\/api\/?$/, '');
+  }
+  return window.location.origin;
+}
+
+export function getSocketPath(): string {
+  return '/socket.io';
+}
+
 export function getAllowedReturnOrigins(): string[] {
   const fromEnv = import.meta.env.VITE_SSO_RETURN_ORIGINS as string | undefined;
   if (fromEnv) {
