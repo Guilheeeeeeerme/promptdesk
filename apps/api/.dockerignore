@@ -22,13 +22,6 @@ Dockerfile*
 README.md
 *.md
 
-src
-test
-.prettierrc
-eslint.config.mjs
-nest-cli.json
-tsconfig.build.json
-
 .claude
 .agents
 .devin
