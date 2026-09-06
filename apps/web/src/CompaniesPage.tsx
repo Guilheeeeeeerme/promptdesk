@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
-import type { Company, CompanyDetail, GuidelineVersionMeta } from './types';
+import type {
+  Company,
+  CompanyDetail,
+  GuidelineValidationStatus,
+  GuidelineVersionMeta,
+} from './types';
 import { isPlatformRole } from './types';
 
 function formatDate(value: string | null | undefined): string {
@@ -12,6 +17,37 @@ function formatDate(value: string | null | undefined): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+const VALIDATION_STATUS_LABELS: Record<GuidelineValidationStatus, string> = {
+  pending: 'Pending validation',
+  valid: 'Valid',
+  invalid: 'Invalid',
+  provider_error: 'Provider error',
+};
+
+const VALIDATION_STATUS_STYLES: Record<GuidelineValidationStatus, string> = {
+  pending: 'bg-amber-100 text-amber-800',
+  valid: 'bg-emerald-100 text-emerald-800',
+  invalid: 'bg-rose-100 text-rose-800',
+  provider_error: 'bg-orange-100 text-orange-800',
+};
+
+function validationStatusLabel(status: string): string {
+  return (
+    VALIDATION_STATUS_LABELS[status as GuidelineValidationStatus] ?? status
+  );
+}
+
+function validationStatusStyle(status: string): string {
+  return (
+    VALIDATION_STATUS_STYLES[status as GuidelineValidationStatus] ??
+    'bg-gray-100 text-gray-700'
+  );
+}
+
+function shortHash(value: string | null | undefined): string {
+  return value ? `${value.slice(0, 12)}…` : '—';
 }
 
 function accentFor(name: string): { bg: string; icon: string } {
@@ -267,7 +303,7 @@ export function CompaniesPage() {
                       </div>
                     </div>
                     <div className="mt-2 sm:flex sm:justify-between">
-                      <div className="flex items-center text-sm text-gray-500">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
                         <i
                           className="fas fa-file-alt flex-shrink-0 mr-1.5 text-gray-400"
                           aria-hidden="true"
@@ -282,6 +318,14 @@ export function CompaniesPage() {
                             {formatDate(company.guidelineUpdatedAt)}
                           </time>
                         </p>
+                        {company.latestValidVersion && (
+                          <p className="text-xs text-gray-500">
+                            Latest valid: v{company.latestValidVersion}
+                            {company.latestValidVersionHash
+                              ? ` · ${shortHash(company.latestValidVersionHash)}`
+                              : ''}
+                          </p>
+                        )}
                       </div>
                       <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
                         <i
@@ -324,6 +368,62 @@ export function CompaniesPage() {
                     ? ` · updated ${formatDate(viewing.guidelineUpdatedAt)}`
                     : ''}
                 </p>
+                <div className="mt-3 grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
+                  <p>
+                    <span className="font-medium text-gray-700">Active:</span>{' '}
+                    {viewing.currentVersion
+                      ? `v${viewing.currentVersion}`
+                      : 'None'}
+                    {viewing.currentVersion &&
+                    viewingVersions?.find(
+                      (version) => version.version === viewing.currentVersion,
+                    )?.contentHash
+                      ? ` · ${shortHash(
+                          viewingVersions.find(
+                            (version) =>
+                              version.version === viewing.currentVersion,
+                          )?.contentHash,
+                        )}`
+                      : ''}
+                  </p>
+                  <p>
+                    <span className="font-medium text-gray-700">
+                      Latest valid:
+                    </span>{' '}
+                    {viewing.latestValidVersion
+                      ? `v${viewing.latestValidVersion} · ${shortHash(
+                          viewing.latestValidVersionHash,
+                        )}`
+                      : 'None'}
+                  </p>
+                </div>
+                {(() => {
+                  const pending = viewingVersions?.find(
+                    (version) => version.status === 'pending',
+                  );
+                  const latestAttempt = viewingVersions?.[0];
+                  const replacementFailed = Boolean(
+                    latestAttempt &&
+                      latestAttempt.version !== viewing.currentVersion &&
+                      (latestAttempt.status === 'invalid' ||
+                        latestAttempt.status === 'provider_error'),
+                  );
+                  return (
+                    <div className="mt-2 space-y-1 text-xs">
+                      {pending && (
+                        <p className="text-amber-700">
+                          Pending version: v{pending.version} · validation in progress
+                        </p>
+                      )}
+                      {replacementFailed && latestAttempt && (
+                        <p className="text-orange-700">
+                          Active guideline remains v{viewing.currentVersion ?? 'none'};{' '}
+                          v{latestAttempt.version} was not activated.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <button
                 type="button"
@@ -353,6 +453,16 @@ export function CompaniesPage() {
                     >
                       {formatDate(v.createdAt)}
                     </time>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${validationStatusStyle(v.status)}`}
+                    >
+                      {validationStatusLabel(v.status)}
+                    </span>
+                    {v.validationReason && (
+                      <span className="min-w-0 truncate text-gray-600">
+                        — {v.validationReason}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
