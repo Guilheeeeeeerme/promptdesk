@@ -8,6 +8,11 @@ import {
   GUIDELINE_VALIDATE_QUEUE,
   type GuidelineValidateJobData,
 } from "./chat.constants";
+import { EventsPublisher } from "./events.publisher";
+import {
+  executeGuidelineValidation,
+  type GuidelineLifecycleStore,
+} from "./guideline-validation.lifecycle";
 
 @Processor(GUIDELINE_VALIDATE_QUEUE)
 export class GuidelineValidationProcessor extends WorkerHost {
@@ -15,52 +20,29 @@ export class GuidelineValidationProcessor extends WorkerHost {
     private readonly prisma: CorePrismaService,
     private readonly gemini: GeminiService,
     private readonly openai: OpenAiService,
+    private readonly events: EventsPublisher,
   ) {
     super();
   }
 
   async process(job: Job<GuidelineValidateJobData>): Promise<void> {
-    const { companyId, versionId } = job.data;
-    const version = await this.prisma.guidelineVersion.findFirst({
-      where: { id: versionId, companyId },
-      select: { id: true, content: true, status: true },
-    });
-    if (!version || version.status !== "pending") return;
-
-    const result = await new GuidelineValidator(
+    const validator = new GuidelineValidator(
       this.openai.isConfigured() ? this.openai : this.gemini,
-    ).validate({ content: version.content });
-    const status =
-      result.status === "valid"
-        ? "valid"
-        : result.status === "provider_error"
-          ? "provider_error"
-          : "invalid";
-    const now = new Date();
-    await this.prisma.$transaction(async (tx) => {
-      await tx.guidelineVersion.update({
-        where: { id: version.id },
-        data: {
-          status,
-          validationReason: result.reason ?? null,
-          validatedAt: now,
-        },
-      });
-      if (status !== "valid") return;
-      const newest = await tx.guidelineVersion.findFirst({
-        where: { companyId, status: "valid" },
-        orderBy: { version: "desc" },
-      });
-      if (!newest) return;
-      await tx.company.update({
-        where: { id: companyId },
-        data: {
-          guidelineText: newest.content,
-          guidelineFileName: newest.fileName,
-          guidelineUpdatedAt: now,
-          currentGuidelineVersionId: newest.id,
-        },
-      });
-    });
+    );
+    await executeGuidelineValidation(
+      this.prisma as unknown as GuidelineLifecycleStore,
+      job.data,
+      async (input) => {
+        const result = await validator.validate(input);
+        if (result.status === "pending") {
+          throw new Error("Guideline validator returned pending after claim");
+        }
+        return {
+          status: result.status === "malicious" ? "invalid" : result.status,
+          reason: result.reason,
+        };
+      },
+      (event) => this.events.publish(event),
+    );
   }
 }

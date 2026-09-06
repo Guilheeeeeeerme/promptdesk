@@ -40,11 +40,13 @@ describe('CompaniesService safe guideline lifecycle', () => {
         expire: jest.fn(),
       }),
     };
+    const guidelineQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
     const service = new CompaniesService(
       prisma as never,
       chatPrisma as never,
       redis as never,
+      guidelineQueue as never,
     );
     await service.uploadGuidelines(
       session,
@@ -58,6 +60,11 @@ describe('CompaniesService safe guideline lifecycle', () => {
       }),
     );
     expect(tx.company.update).not.toHaveBeenCalled();
+    expect(guidelineQueue.add).toHaveBeenCalledWith(
+      'validate',
+      { companyId: 'company-1', versionId: 'version-4' },
+      expect.objectContaining({ jobId: expect.not.stringContaining(':') }),
+    );
   });
 
   it('preserves the active version when a replacement fails validation', async () => {
@@ -98,6 +105,97 @@ describe('CompaniesService safe guideline lifecycle', () => {
         { version: 1, status: 'valid' },
       ]),
     ).toEqual(expect.objectContaining({ version: 2, status: 'valid' }));
+  });
+
+  it('cancels only a pending replacement, removes its job, and publishes its status', async () => {
+    const publish = jest.fn().mockResolvedValue(1);
+    const remove = jest.fn().mockResolvedValue(undefined);
+    const prisma = {
+      company: { findUnique: jest.fn().mockResolvedValue({ id: 'company-1' }) },
+      guidelineVersion: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'version-4',
+          companyId: 'company-1',
+          version: 4,
+          status: 'pending',
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const queue = {
+      add: jest.fn(),
+      getJob: jest.fn().mockResolvedValue({ remove }),
+    };
+    const service = new CompaniesService(
+      prisma as never,
+      {} as never,
+      { getClient: () => ({ publish }) } as never,
+      queue as never,
+    ) as CompaniesService & {
+      cancelGuidelineVersion: (
+        session: typeof session,
+        companyId: string,
+        versionId: string,
+      ) => Promise<{ status: string }>;
+    };
+
+    await expect(
+      service.cancelGuidelineVersion(session, 'company-1', 'version-4'),
+    ).resolves.toEqual(expect.objectContaining({ status: 'cancelled' }));
+    expect(prisma.guidelineVersion.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'version-4',
+        companyId: 'company-1',
+        status: 'pending',
+      },
+      data: expect.objectContaining({
+        status: 'cancelled',
+        validationReason: 'Cancelled by user',
+      }),
+    });
+    expect(queue.getJob).toHaveBeenCalledWith(
+      'guideline-validate-version-4',
+    );
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(publish.mock.calls[0][1])).toEqual(
+      expect.objectContaining({
+        type: 'guideline_validation',
+        companyId: 'company-1',
+        versionId: 'version-4',
+        version: 4,
+        status: 'cancelled',
+      }),
+    );
+  });
+
+  it('does not let an agent cancel a pending replacement', async () => {
+    const updateMany = jest.fn();
+    const service = new CompaniesService(
+      {
+        company: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'company-1' }),
+        },
+        guidelineVersion: { updateMany },
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    ) as CompaniesService & {
+      cancelGuidelineVersion: (
+        session: typeof session,
+        companyId: string,
+        versionId: string,
+      ) => Promise<unknown>;
+    };
+
+    await expect(
+      service.cancelGuidelineVersion(
+        { ...session, role: 'agent' },
+        'company-1',
+        'version-4',
+      ),
+    ).rejects.toThrow('Agents cannot upload or clear company guidelines');
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });
 

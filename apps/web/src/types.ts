@@ -36,11 +36,28 @@ export interface GuidelineVersionMeta {
   validatedAt?: string | null;
 }
 
+export interface GuidelineVersionDetail extends GuidelineVersionMeta {
+  content: string;
+}
+
+export interface GuidelineValidationEvent {
+  type: 'guideline_validation';
+  companyId: string;
+  versionId: string;
+  version: number;
+  status: GuidelineValidationStatus;
+  reason?: string | null;
+  activeVersion?: number | null;
+  occurredAt: string;
+}
+
 export type GuidelineValidationStatus =
   | 'pending'
+  | 'processing'
   | 'valid'
   | 'invalid'
-  | 'provider_error';
+  | 'provider_error'
+  | 'cancelled';
 
 export interface UserView {
   id: string;

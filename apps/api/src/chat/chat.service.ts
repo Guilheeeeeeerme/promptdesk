@@ -180,7 +180,10 @@ export class ChatService {
     );
   }
 
-  private async enqueueGenerate(data: ChatGenerateJobData) {
+  private async enqueueGenerate(
+    data: ChatGenerateJobData,
+    jobId = `chat-gen-${data.assistantMessageId}-${data.provider ?? 'gemini'}`,
+  ) {
     const provider = data.provider ?? 'gemini';
     await this.chatQueue.add(
       'generate',
@@ -190,7 +193,7 @@ export class ChatService {
         backoff: { type: 'exponential', delay: 1000 },
         removeOnComplete: 100,
         removeOnFail: 200,
-        jobId: `chat-gen:${data.assistantMessageId}:${provider}`,
+        jobId,
       },
     );
   }
@@ -624,7 +627,7 @@ export class ChatService {
       userId: session.userId,
       conversationId: message.conversationId ?? undefined,
       provider: 'gemini',
-    });
+    }, `chat-gen-${updated.id}-gemini-retry-${Date.now()}`);
 
     return {
       status: 'pending' as const,
