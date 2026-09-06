@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { io, type Socket } from 'socket.io-client';
 import {
   apiFetch,
@@ -17,13 +17,18 @@ import type {
   GuidelineVersionMeta,
 } from './types';
 import { isPlatformRole } from './types';
+import { FeedbackBanner, type Feedback } from './FeedbackBanner';
 
-function formatDate(value: string | null | undefined): string {
+function formatTimestamp(value: string | null | undefined): string {
   if (!value) return 'Never';
-  return new Date(value).toLocaleDateString(undefined, {
+  return new Date(value).toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
   });
 }
 
@@ -36,25 +41,9 @@ const VALIDATION_STATUS_LABELS: Record<GuidelineValidationStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-const VALIDATION_STATUS_STYLES: Record<GuidelineValidationStatus, string> = {
-  pending: 'bg-amber-100 text-amber-800',
-  processing: 'bg-sky-100 text-sky-800',
-  valid: 'bg-emerald-100 text-emerald-800',
-  invalid: 'bg-rose-100 text-rose-800',
-  provider_error: 'bg-orange-100 text-orange-800',
-  cancelled: 'bg-gray-100 text-gray-700',
-};
-
 function validationStatusLabel(status: string): string {
   return (
     VALIDATION_STATUS_LABELS[status as GuidelineValidationStatus] ?? status
-  );
-}
-
-function validationStatusStyle(status: string): string {
-  return (
-    VALIDATION_STATUS_STYLES[status as GuidelineValidationStatus] ??
-    'bg-gray-100 text-gray-700'
   );
 }
 
@@ -78,9 +67,11 @@ function accentFor(name: string): { bg: string; icon: string } {
 
 export function CompaniesPage() {
   const { session, refreshCompanies } = useAuth();
+  const location = useLocation();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<CompanyDetail | null>(null);
   const [viewingVersions, setViewingVersions] = useState<
@@ -90,12 +81,18 @@ export function CompaniesPage() {
   const [viewTab, setViewTab] = useState<'replace' | 'history'>('replace');
   const [historyDetail, setHistoryDetail] =
     useState<GuidelineVersionDetail | null>(null);
+  const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const socketRef = useRef<Socket | null>(null);
   const companiesRef = useRef<Company[]>([]);
   const viewingRef = useRef<CompanyDetail | null>(null);
   companiesRef.current = companies;
   viewingRef.current = viewing;
+
+  useEffect(() => {
+    const state = location.state as { feedback?: Feedback } | null;
+    if (state?.feedback) setFeedback(state.feedback);
+  }, [location.state]);
 
   const canManage = Boolean(
     session &&
@@ -114,7 +111,9 @@ export function CompaniesPage() {
       try {
         await load();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load companies');
+        const message = err instanceof Error ? err.message : 'Failed to load companies';
+        setError(message);
+        setFeedback({ tone: 'error', message });
       } finally {
         setLoading(false);
       }
@@ -136,7 +135,9 @@ export function CompaniesPage() {
       setHistoryDetail(null);
       socketRef.current?.emit('guideline:subscribe', { companyId });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load guidelines');
+      const message = err instanceof Error ? err.message : 'Failed to load guidelines';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       setViewLoading(false);
     }
@@ -177,8 +178,36 @@ export function CompaniesPage() {
                   }
                 : version,
             )
-          : versions,
+        : versions,
       );
+      if (viewingRef.current?.id === event.companyId) {
+        if (event.status === 'processing') {
+          setFeedback({
+            tone: 'info',
+            message: `Guideline v${event.version} is being validated…`,
+          });
+        } else if (event.status === 'valid') {
+          setFeedback({
+            tone: 'success',
+            message: `Guideline v${event.version} passed validation and is now active.`,
+          });
+        } else if (event.status === 'invalid') {
+          setFeedback({
+            tone: 'error',
+            message: `Guideline v${event.version} was rejected: ${event.reason ?? 'validation failed'}`,
+          });
+        } else if (event.status === 'provider_error') {
+          setFeedback({
+            tone: 'error',
+            message: `Guideline v${event.version} could not be validated: ${event.reason ?? 'validation service unavailable'}`,
+          });
+        } else if (event.status === 'cancelled') {
+          setFeedback({
+            tone: 'info',
+            message: `Guideline v${event.version} validation was cancelled.`,
+          });
+        }
+      }
       if (event.status !== 'processing' && event.status !== 'pending') {
         void load();
         void refreshCompanies();
@@ -204,19 +233,25 @@ export function CompaniesPage() {
   async function cancelPending(companyId: string, versionId: string) {
     setBusyId(companyId);
     setError(null);
+    setFeedback({ tone: 'info', message: 'Cancelling guideline validation…' });
     try {
       await apiFetch(`/companies/${companyId}/guidelines/versions/${versionId}`, {
         method: 'DELETE',
       });
       await openGuidelines(companyId);
+      setFeedback({ tone: 'success', message: 'Guideline validation cancelled. The active guideline was unchanged.' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cancellation failed');
+      const message = err instanceof Error ? err.message : 'Cancellation failed';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       setBusyId(null);
     }
   }
 
   async function inspectVersion(companyId: string, versionId: string) {
+    setHistoryLoadingId(versionId);
+    setFeedback(null);
     try {
       setHistoryDetail(
         await apiFetch<GuidelineVersionDetail>(
@@ -224,7 +259,11 @@ export function CompaniesPage() {
         ),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load version');
+      const message = err instanceof Error ? err.message : 'Failed to load version';
+      setError(message);
+      setFeedback({ tone: 'error', message });
+    } finally {
+      setHistoryLoadingId(null);
     }
   }
 
@@ -240,6 +279,7 @@ export function CompaniesPage() {
     if (!file) return;
     setBusyId(companyId);
     setError(null);
+    setFeedback({ tone: 'info', message: 'Uploading guideline and starting validation…' });
     try {
       const body = new FormData();
       body.append('file', file);
@@ -252,8 +292,11 @@ export function CompaniesPage() {
       if (viewing?.id === companyId) {
         await openGuidelines(companyId);
       }
+      setFeedback({ tone: 'success', message: 'Guideline uploaded successfully. It is pending validation; the current active guideline remains unchanged until validation passes.' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       setBusyId(null);
       const input = fileInputs.current[companyId];
@@ -265,6 +308,7 @@ export function CompaniesPage() {
     if (!window.confirm('Clear guidelines for this company?')) return;
     setBusyId(companyId);
     setError(null);
+    setFeedback({ tone: 'info', message: 'Clearing active guideline…' });
     try {
       await apiFetch(`/companies/${companyId}/guidelines`, {
         method: 'DELETE',
@@ -284,8 +328,11 @@ export function CompaniesPage() {
             : null,
         );
       }
+      setFeedback({ tone: 'success', message: 'Active guideline cleared. Version history was preserved.' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Clear failed');
+      const message = err instanceof Error ? err.message : 'Clear failed';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       setBusyId(null);
     }
@@ -317,11 +364,9 @@ export function CompaniesPage() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3">
-          {error}
-        </div>
-      )}
+      <FeedbackBanner
+        feedback={feedback ?? (error ? { tone: 'error', message: error } : null)}
+      />
 
       <div className="bg-white shadow overflow-hidden sm:rounded-md">
         {companies.length === 0 ? (
@@ -368,7 +413,7 @@ export function CompaniesPage() {
                           className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         >
                           <i className="fas fa-eye mr-1" aria-hidden="true" />
-                          View
+                          {viewLoading ? 'Loading…' : 'View'}
                         </button>
                         {canManage && (
                           <>
@@ -433,8 +478,9 @@ export function CompaniesPage() {
                             : 'Guidelines last updated on '}
                           <time
                             dateTime={company.guidelineUpdatedAt ?? undefined}
+                            title={company.guidelineUpdatedAt ?? undefined}
                           >
-                            {formatDate(company.guidelineUpdatedAt)}
+                            {formatTimestamp(company.guidelineUpdatedAt)}
                           </time>
                         </p>
                         {company.latestValidVersion && (
@@ -486,7 +532,7 @@ export function CompaniesPage() {
                     ? ` · active version ${viewing.currentVersion}`
                     : ''}
                   {viewing.guidelineUpdatedAt
-                    ? ` · updated ${formatDate(viewing.guidelineUpdatedAt)}`
+                    ? ` · updated ${formatTimestamp(viewing.guidelineUpdatedAt)}`
                     : ''}
                 </p>
               </div>
@@ -561,37 +607,59 @@ export function CompaniesPage() {
                 </pre>
               </div>
             ) : (
-              <div className="min-h-0 overflow-auto p-4 space-y-4">
+              <div className="min-h-0 overflow-hidden p-4 flex gap-4">
                 {!viewingVersions?.length ? (
                   <p className="text-sm text-gray-500">No guideline history.</p>
                 ) : (
-                  <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md">
+                  <ul className="w-64 shrink-0 overflow-auto divide-y divide-gray-100 border border-gray-200 rounded-md">
                     {viewingVersions.map((version) => (
-                      <li key={version.id} className="p-3 flex items-center gap-3">
+                      <li key={version.id}>
                         <button
                           type="button"
+                          disabled={historyLoadingId === version.id}
                           onClick={() => void inspectVersion(viewing.id, version.id)}
-                          className="min-w-0 flex-1 text-left"
+                          className={`w-full p-3 text-left hover:bg-gray-50 ${
+                            historyDetail?.id === version.id
+                              ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200'
+                              : ''
+                          }`}
                         >
-                          <span className="font-medium text-gray-800">v{version.version}</span>{' '}
-                          <span className="text-sm text-gray-500">
-                            {version.fileName ?? 'guidelines.txt'} · {formatDate(version.createdAt)}
+                          <span className="block font-medium text-gray-800">
+                            {historyLoadingId === version.id
+                              ? 'Loading…'
+                              : `v${version.version} · ${validationStatusLabel(version.status)}`}
                           </span>
+                          <span className="block text-xs text-gray-500 mt-1">
+                            {version.fileName ?? 'guidelines.txt'}
+                          </span>
+                          <time
+                            className="block text-xs text-gray-500 mt-1"
+                            dateTime={version.createdAt}
+                            title={version.createdAt}
+                          >
+                            Uploaded {formatTimestamp(version.createdAt)}
+                          </time>
+                          {version.validatedAt && (
+                            <time
+                              className="block text-xs text-gray-500 mt-1"
+                              dateTime={version.validatedAt}
+                              title={version.validatedAt}
+                            >
+                              Processed {formatTimestamp(version.validatedAt)}
+                            </time>
+                          )}
                           {version.validationReason && (
                             <span className="block truncate text-xs text-gray-500 mt-1">
                               {version.validationReason}
                             </span>
                           )}
                         </button>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${validationStatusStyle(version.status)}`}>
-                          {validationStatusLabel(version.status)}
-                        </span>
                         {canManage && version.status === 'pending' && (
                           <button
                             type="button"
                             disabled={busyId === viewing.id}
                             onClick={() => void cancelPending(viewing.id, version.id)}
-                            className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-60"
+                            className="ml-3 mb-2 text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-60"
                           >
                             Cancel
                           </button>
@@ -600,16 +668,26 @@ export function CompaniesPage() {
                     ))}
                   </ul>
                 )}
-                {historyDetail && (
-                  <div className="rounded-md border border-gray-200">
+                <div className="min-w-0 flex-1 overflow-auto rounded-md border border-gray-200">
+                  {historyDetail ? (
                     <div className="border-b border-gray-200 px-3 py-2 text-sm font-medium text-gray-700">
-                      Version {historyDetail.version} snapshot
+                      <div>Version {historyDetail.version} snapshot</div>
+                      <div className="mt-1 text-xs font-normal text-gray-500">
+                        Created {formatTimestamp(historyDetail.createdAt)}
+                        {historyDetail.validatedAt
+                          ? ` · processed ${formatTimestamp(historyDetail.validatedAt)}`
+                          : ''}
+                      </div>
+                      <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-800">
+                        {historyDetail.content}
+                      </pre>
                     </div>
-                    <pre className="p-4 text-sm text-gray-800 whitespace-pre-wrap">
-                      {historyDetail.content}
-                    </pre>
-                  </div>
-                )}
+                  ) : (
+                    <p className="p-4 text-sm text-gray-500">
+                      Select a version to inspect its guideline context.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

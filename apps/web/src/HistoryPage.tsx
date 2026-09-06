@@ -8,6 +8,7 @@ import {
 import { isPlatformRole } from '@shared/auth';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { FeedbackBanner, type Feedback } from './FeedbackBanner';
 
 type ConversationStatus =
   | 'open'
@@ -130,6 +131,7 @@ export function HistoryPage() {
   const [items, setItems] = useState<ConversationDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -143,6 +145,7 @@ export function HistoryPage() {
   const [summary, setSummary] = useState<SummaryDto | null>(null);
   const [reply, setReply] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [updatingConversationId, setUpdatingConversationId] = useState<string | null>(null);
 
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
@@ -190,7 +193,9 @@ export function HistoryPage() {
     } catch (err) {
       if (requestId !== listRequestRef.current) return;
       setItems([]);
-      setError(err instanceof Error ? err.message : 'Failed to load history');
+      const message = err instanceof Error ? err.message : 'Failed to load history';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       if (requestId === listRequestRef.current) {
         setLoading(false);
@@ -263,6 +268,10 @@ export function HistoryPage() {
         setDetailError(
           err instanceof Error ? err.message : 'Failed to load conversation',
         );
+        setFeedback({
+          tone: 'error',
+          message: err instanceof Error ? err.message : 'Failed to load conversation',
+        });
       } finally {
         if (requestId === detailRequestRef.current) {
           setDetailLoading(false);
@@ -274,6 +283,8 @@ export function HistoryPage() {
   const patchConversation = useCallback(
     async (id: string, patch: Record<string, unknown>) => {
       setError(null);
+      setUpdatingConversationId(id);
+      setFeedback({ tone: 'info', message: 'Saving conversation changes…' });
       try {
         const updated = await apiFetch<ConversationDto>(
           `/chat/conversations/${id}`,
@@ -285,8 +296,13 @@ export function HistoryPage() {
         // Merge locally: the PATCH response omits platform owner fields.
         setDetail((prev) => (prev && prev.id === id ? { ...prev, ...updated } : prev));
         await loadList();
+        setFeedback({ tone: 'success', message: 'Conversation changes saved.' });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Update failed');
+        const message = err instanceof Error ? err.message : 'Update failed';
+        setError(message);
+        setFeedback({ tone: 'error', message });
+      } finally {
+        setUpdatingConversationId(null);
       }
     },
     [loadList],
@@ -300,6 +316,7 @@ export function HistoryPage() {
 
       setError(null);
       setSendingReply(true);
+      setFeedback({ tone: 'info', message: 'Sending reply…' });
       try {
         const message = await apiFetch<ChatMessageDto>(
           `/chat/conversations/${activeSelectedId}/messages`,
@@ -310,8 +327,11 @@ export function HistoryPage() {
         );
         setMessages((prev) => [...prev, message]);
         setReply('');
+        setFeedback({ tone: 'success', message: 'Reply sent.' });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Reply failed');
+        const message = err instanceof Error ? err.message : 'Reply failed';
+        setError(message);
+        setFeedback({ tone: 'error', message });
       } finally {
         setSendingReply(false);
       }
@@ -415,14 +435,9 @@ export function HistoryPage() {
         </div>
       )}
 
-      {error && (
-        <div
-          role="alert"
-          className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 break-words"
-        >
-          {error}
-        </div>
-      )}
+      <FeedbackBanner
+        feedback={feedback ?? (error ? { tone: 'error', message: error } : null)}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section
@@ -531,6 +546,7 @@ export function HistoryPage() {
                   {isPlatform ? (
                     <select
                       value={detail.status}
+                      disabled={updatingConversationId === detail.id}
                       onChange={(e) =>
                         void patchConversation(detail.id, {
                           status: e.target.value,

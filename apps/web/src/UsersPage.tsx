@@ -8,6 +8,7 @@ import type {
   UserView,
 } from './types';
 import type { Role } from '@shared/auth';
+import { FeedbackBanner, type Feedback } from './FeedbackBanner';
 
 const allRoles: Role[] = ['root', 'admin', 'manager', 'agent'];
 
@@ -69,7 +70,7 @@ function UserForm({ actorRole, user, busy, onCancel, onSubmit }: UserFormProps) 
             {user ? 'Update account details or reset the password.' : 'Add a user to the active company.'}
           </p>
         </div>
-        <button type="button" onClick={onCancel} className="text-sm font-medium text-gray-500 hover:text-gray-900">
+        <button type="button" disabled={busy} onClick={onCancel} className="text-sm font-medium text-gray-500 hover:text-gray-900 disabled:opacity-60">
           Cancel
         </button>
       </div>
@@ -105,6 +106,7 @@ export function UsersPage() {
   const [users, setUsers] = useState<UserView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [editing, setEditing] = useState<UserView | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
 
@@ -119,7 +121,9 @@ export function UsersPage() {
   useEffect(() => {
     if (!canManage) return;
     void load().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : 'Failed to load users');
+      const message = err instanceof Error ? err.message : 'Failed to load users';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     }).finally(() => setLoading(false));
   }, [canManage, load]);
 
@@ -138,6 +142,7 @@ export function UsersPage() {
   async function createOrUpdate(input: CreateUserInput | UpdateUserInput) {
     setBusy(true);
     setError(null);
+    setFeedback({ tone: 'info', message: formUser ? 'Saving user changes…' : 'Creating user…' });
     try {
       if (formUser) {
         await apiFetch<UserView>(`/users/${formUser.id}`, { method: 'PATCH', body: JSON.stringify(input) });
@@ -146,8 +151,11 @@ export function UsersPage() {
       }
       await load();
       setEditing(undefined);
+      setFeedback({ tone: 'success', message: formUser ? 'User changes saved.' : 'User created successfully.' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save user');
+      const message = err instanceof Error ? err.message : 'Unable to save user';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       setBusy(false);
     }
@@ -157,12 +165,16 @@ export function UsersPage() {
     if (!window.confirm(`Delete ${user.name}? This cannot be undone.`)) return;
     setBusy(true);
     setError(null);
+    setFeedback({ tone: 'info', message: `Deleting ${user.name}…` });
     try {
       await apiFetch(`/users/${user.id}`, { method: 'DELETE' });
       await load();
       if (formUser?.id === user.id) setEditing(undefined);
+      setFeedback({ tone: 'success', message: `${user.name} was deleted.` });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to delete user');
+      const message = err instanceof Error ? err.message : 'Unable to delete user';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       setBusy(false);
     }
@@ -181,7 +193,9 @@ export function UsersPage() {
           </button>
         )}
       </div>
-      {error && <div className="mb-4 rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      <FeedbackBanner
+        feedback={feedback ?? (error ? { tone: 'error', message: error } : null)}
+      />
       {editing !== undefined && <div className="mb-6"><UserForm actorRole={session.user.role} user={formUser} busy={busy} onCancel={() => setEditing(undefined)} onSubmit={createOrUpdate} /></div>}
       <div className="overflow-hidden rounded-lg bg-white shadow">
         {users.length === 0 ? <p className="px-4 py-10 text-center text-sm text-gray-500">{emptyMessage}</p> : (

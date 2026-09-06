@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { isPlatformRole } from './types';
+import { FeedbackBanner, type Feedback } from './FeedbackBanner';
 
 export function AddCompanyPage() {
   const { session, refreshCompanies } = useAuth();
@@ -10,6 +11,7 @@ export function AddCompanyPage() {
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
@@ -24,9 +26,11 @@ export function AddCompanyPage() {
     }
     if (!next.name.toLowerCase().endsWith('.txt')) {
       setError('Only .txt guideline files are supported');
+      setFeedback({ tone: 'error', message: 'Only .txt guideline files are supported.' });
       return;
     }
     setError(null);
+    setFeedback(null);
     setFile(next);
   }
 
@@ -39,6 +43,7 @@ export function AddCompanyPage() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setFeedback({ tone: 'info', message: 'Creating company…' });
     setSubmitting(true);
     try {
       const body = new FormData();
@@ -48,9 +53,20 @@ export function AddCompanyPage() {
       }
       await apiFetch('/companies', { method: 'POST', body });
       await refreshCompanies();
-      navigate('/companies');
+      navigate('/companies', {
+        state: {
+          feedback: {
+            tone: 'success' as const,
+            message: file
+              ? 'Company created. Its guideline is active and ready to use.'
+              : 'Company created successfully.',
+          },
+        },
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create company');
+      const message = err instanceof Error ? err.message : 'Failed to create company';
+      setError(message);
+      setFeedback({ tone: 'error', message });
     } finally {
       setSubmitting(false);
     }
@@ -140,11 +156,9 @@ export function AddCompanyPage() {
               </div>
             </div>
 
-            {error && (
-              <div className="rounded-md bg-red-50 border border-red-100 text-red-700 text-sm px-4 py-3">
-                {error}
-              </div>
-            )}
+            <FeedbackBanner
+              feedback={feedback ?? (error ? { tone: 'error', message: error } : null)}
+            />
 
             <div className="flex justify-end space-x-3">
               <Link

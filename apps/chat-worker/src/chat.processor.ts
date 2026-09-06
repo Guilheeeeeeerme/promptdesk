@@ -23,6 +23,7 @@ import {
 } from './placeholders';
 import { PrismaService } from './prisma.service';
 import { boundPromptContext } from './prompt-budget';
+import { resolveGuidelineContext } from './guideline-context';
 
 @Processor(CHAT_GENERATE_QUEUE)
 export class ChatGenerateProcessor extends WorkerHost {
@@ -168,9 +169,17 @@ export class ChatGenerateProcessor extends WorkerHost {
         throw new Error('Conversation ownership mismatch');
       }
 
-      // Resolve at execution time so replacements apply to existing
-      // conversations and retries are traceable to the policy actually used.
-      const guidelines = guidelineVersion?.content ?? null;
+      // A conversation owns its guideline context. Management updates apply
+      // to new conversations; they must not mutate an existing chat's policy.
+      const guidelineContext = resolveGuidelineContext(
+        conversation ?? {
+          guidelineSnapshot: null,
+          guidelineSnapshotHash: null,
+          guidelineVersionId: null,
+        },
+        guidelineVersion,
+      );
+      const guidelines = guidelineContext?.content ?? null;
 
       await this.assertNotAborted(assistantMessageId);
 
@@ -244,8 +253,8 @@ export class ChatGenerateProcessor extends WorkerHost {
           provider,
           attemptCount: totalAttempts,
           customerId: customer.id,
-          guidelineVersionId: guidelineVersion?.id ?? null,
-          guidelineVersionHash: guidelineVersion?.contentHash ?? null,
+          guidelineVersionId: guidelineContext?.id ?? null,
+          guidelineVersionHash: guidelineContext?.contentHash ?? null,
         },
       });
 
