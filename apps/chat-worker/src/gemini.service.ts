@@ -36,15 +36,16 @@ export class GeminiService {
     return override?.trim() || this.defaultModel;
   }
 
-  async validateGuideline(content: string): Promise<unknown> {
-    const model = this.client.getGenerativeModel({
-      model: this.defaultModel,
+  async validateGuideline(content: string, model?: string): Promise<unknown> {
+    const modelName = this.getModelName(model);
+    const modelClient = this.client.getGenerativeModel({
+      model: modelName,
       generationConfig: {
         maxOutputTokens: 100,
         responseMimeType: "application/json",
       },
     });
-    const result = await model.generateContent(
+    const result = await modelClient.generateContent(
       `${renderPrompt('support.guideline.validation.system')}\n\n${renderPrompt('support.guideline.validation.user', { guideline: content })}`,
       { timeout: PROVIDER_TIMEOUT_MS },
     );

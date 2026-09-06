@@ -32,10 +32,10 @@ export class OpenAiService {
     return Boolean(this.config.get<string>("OPENAI_API_KEY")?.trim());
   }
 
-  async validateGuideline(content: string): Promise<unknown> {
+  async validateGuideline(content: string, model?: string): Promise<unknown> {
     const completion = await this.getClient().chat.completions.create(
       {
-        model: this.defaultModel,
+        model: this.getModelName(model),
         messages: [
           {
             role: "system",
