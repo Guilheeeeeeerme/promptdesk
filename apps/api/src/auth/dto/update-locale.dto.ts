@@ -1,6 +1,10 @@
 import { IsIn } from 'class-validator';
+import {
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from '../../common/supported-locales';
 
 export class UpdateLocaleDto {
-  @IsIn(['en-US', 'pt-BR'])
-  locale!: 'en-US' | 'pt-BR';
+  @IsIn(SUPPORTED_LOCALES)
+  locale!: SupportedLocale;
 }

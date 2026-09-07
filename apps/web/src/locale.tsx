@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { detectLocale, formatLocaleDate, isLocale, translate, type Locale } from '@shared/auth';
+import { detectLocale, formatLocaleDate, isLocale, localeDirection, translate, type Locale } from '@shared/auth';
 import { apiFetch } from './api';
 
 type LocaleContextValue = { locale: Locale; setLocale: (locale: Locale) => Promise<void>; t: (value: string) => string; formatDate: (value: string | Date) => string };
@@ -8,6 +8,10 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 export function LocaleProvider({ children, initialLocale }: { children: ReactNode; initialLocale?: Locale | null }) {
   const [locale, setCurrent] = useState<Locale>(initialLocale && isLocale(initialLocale) ? initialLocale : detectLocale());
   useEffect(() => { if (initialLocale && isLocale(initialLocale)) setCurrent(initialLocale); }, [initialLocale]);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.documentElement.dir = localeDirection(locale);
+  }, [locale]);
   async function setLocale(next: Locale) {
     const previous = locale;
     setCurrent(next);

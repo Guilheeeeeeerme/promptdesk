@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
 import { executeGuidelineValidation } from "./guideline-validation.lifecycle.ts";
 
 describe("guideline validation lifecycle", () => {
@@ -27,8 +25,8 @@ describe("guideline validation lifecycle", () => {
       },
     );
 
-    assert.equal(providerCalls, 0);
-    assert.equal(published, 0);
+    expect(providerCalls).toBe(0);
+    expect(published).toBe(0);
   });
 
   it("does not activate when the claimed version no longer owns processing", async () => {
@@ -67,8 +65,8 @@ describe("guideline validation lifecycle", () => {
       },
     );
 
-    assert.equal(companyUpdates, 0);
-    assert.deepEqual(statuses, ["processing"]);
+    expect(companyUpdates).toBe(0);
+    expect(statuses).toEqual(["processing"]);
   });
 
   it("activates the newest valid version and publishes the terminal event", async () => {
@@ -112,7 +110,7 @@ describe("guideline validation lifecycle", () => {
       },
     );
 
-    assert.equal(activatedId, "version-4");
-    assert.deepEqual(statuses, ["processing", "valid"]);
+    expect(activatedId).toBe("version-4");
+    expect(statuses).toEqual(["processing", "valid"]);
   });
 });

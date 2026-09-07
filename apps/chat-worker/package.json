@@ -8,7 +8,8 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "prisma:generate": "prisma generate --schema prisma-core/schema.prisma && prisma generate --schema prisma-chat/schema.prisma"
+    "prisma:generate": "prisma generate --schema prisma-core/schema.prisma && prisma generate --schema prisma-chat/schema.prisma",
+    "test": "jest"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
@@ -31,6 +32,22 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.0.0",
     "prisma": "^6.19.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.2.5"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "testEnvironment": "node"
   }
 }

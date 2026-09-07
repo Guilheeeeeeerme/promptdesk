@@ -1,3 +1,5 @@
+import type { SupportedLocale } from '../common/supported-locales';
+
 export const CHAT_GENERATE_QUEUE = 'chat-generate';
 export const GUIDELINE_VALIDATE_QUEUE = 'guideline-validate';
 export const CHAT_EVENTS_CHANNEL = 'chat:events';
@@ -27,7 +29,7 @@ export function chatIdemKey(
 }
 
 export type ChatProvider = 'gemini' | 'openai';
-export type ChatLocale = 'en-US' | 'pt-BR';
+export type ChatLocale = SupportedLocale;
 
 export type ChatGenerateJobData = {
   assistantMessageId: string;

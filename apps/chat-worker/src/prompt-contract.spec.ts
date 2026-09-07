@@ -1,3 +1,7 @@
+// The services only inject ConfigService; the ESM-only package is stubbed out
+// because these tests never read configuration.
+jest.mock('@nestjs/config', () => ({ ConfigService: class ConfigService {} }));
+
 import { GeminiService } from './gemini.service';
 import { OpenAiService } from './openai.service';
 import {

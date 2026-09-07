@@ -6,7 +6,7 @@ import {
   type MouseEvent,
 } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { appendTokenToReturnUrl } from '@shared/auth';
+import { appendTokenToReturnUrl, LOCALE_LABELS, SUPPORTED_LOCALES } from '@shared/auth';
 import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
 import type { Role } from './types';
@@ -177,7 +177,7 @@ export function AppShell() {
               {t('Company')}
             </span>
             <span className="block truncate text-sm font-medium text-gray-900">
-              {session.activeCompany?.name ?? 'No company'}
+              {session.activeCompany?.name ?? t('No company')}
             </span>
           </div>
         )}
@@ -257,8 +257,9 @@ export function AppShell() {
                       </div>
                       <label className="block px-3 pt-2 text-xs text-gray-500" htmlFor="language-select">{t('Language')}</label>
                       <select id="language-select" value={locale} onChange={(e) => void setLocale(e.target.value as typeof locale)} className="mx-3 my-1 w-[calc(100%-1.5rem)] rounded border border-gray-300 px-2 py-1 text-sm">
-                        <option value="en-US">English</option>
-                        <option value="pt-BR">Português (Brasil)</option>
+                        {SUPPORTED_LOCALES.map((supported) => (
+                          <option key={supported} value={supported}>{LOCALE_LABELS[supported]}</option>
+                        ))}
                       </select>
                       <button
                         type="button"
@@ -362,7 +363,7 @@ export function AppShell() {
               Company
             </span>
             <span className="block truncate text-sm font-medium text-gray-900">
-              {session.activeCompany?.name ?? 'No company'}
+              {session.activeCompany?.name ?? t('No company')}
             </span>
           </div>
         )}

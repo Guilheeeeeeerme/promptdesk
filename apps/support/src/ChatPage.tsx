@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
+import { LOCALE_LABELS, SUPPORTED_LOCALES } from '@shared/auth';
 import { useAuth } from './auth';
 import { useLocale } from './locale';
 
@@ -54,6 +55,14 @@ const STATUS_BADGES: Record<ConversationStatus, string> = {
   solved: 'bg-emerald-100 text-emerald-700',
   not_solved: 'bg-rose-100 text-rose-700',
   wont_solve: 'bg-slate-200 text-slate-600',
+};
+
+/** Full sentences so the status word can be declined per language. */
+const VIEW_ONLY_COPY: Record<ConversationStatus, string> = {
+  open: '',
+  solved: 'This conversation is solved — reopen to continue.',
+  not_solved: 'This conversation is not solved — reopen to continue.',
+  wont_solve: "This conversation won't be solved — reopen to continue.",
 };
 
 /** End users never see provider internals (credits, quotas, HTTP codes). */
@@ -495,6 +504,7 @@ export function ChatPage() {
           body: JSON.stringify({
             message: content,
             idempotencyKey: crypto.randomUUID(),
+            locale,
             ...(activeId ? { conversationId: activeId } : {}),
           }),
         });
@@ -534,7 +544,7 @@ export function ChatPage() {
         setSending(false);
       }
     },
-    [input, sending, viewOnly, activeId, trackPending, loadConversations],
+    [input, sending, viewOnly, activeId, locale, trackPending, loadConversations],
   );
 
   const onStop = useCallback(
@@ -589,7 +599,7 @@ export function ChatPage() {
         );
         const result = await apiFetch<RetryResponse>(
           `/chat/messages/${assistantId}/retry`,
-          { method: 'POST' },
+          { method: 'POST', body: JSON.stringify({ locale }) },
         );
         setMessages((prev) =>
           prev.map((m) =>
@@ -612,7 +622,7 @@ export function ChatPage() {
         );
       }
     },
-    [trackPending],
+    [locale, trackPending],
   );
 
   if (loading || !session) {
@@ -685,7 +695,7 @@ export function ChatPage() {
                       {session.user.email}
                     </div>
                     <label className="block px-3 pt-2 text-xs text-gray-500" htmlFor="support-language-select">{t('Language')}</label>
-                    <select id="support-language-select" value={locale} onChange={(e) => void setLocale(e.target.value as typeof locale)} className="mx-3 my-1 w-[calc(100%-1.5rem)] rounded border border-gray-300 px-2 py-1 text-sm"><option value="en-US">English</option><option value="pt-BR">Português (Brasil)</option></select>
+                    <select id="support-language-select" value={locale} onChange={(e) => void setLocale(e.target.value as typeof locale)} className="mx-3 my-1 w-[calc(100%-1.5rem)] rounded border border-gray-300 px-2 py-1 text-sm">{SUPPORTED_LOCALES.map((supported) => <option key={supported} value={supported}>{LOCALE_LABELS[supported]}</option>)}</select>
                     <button
                       type="button"
                       role="menuitem"
@@ -716,7 +726,7 @@ export function ChatPage() {
           {sidebarOpen && (
             <button
               type="button"
-              aria-label="Close conversations menu"
+              aria-label={t('Close conversations menu')}
               className="fixed inset-0 z-40 bg-gray-900/40 md:hidden"
               onClick={closeSidebar}
             />
@@ -725,7 +735,7 @@ export function ChatPage() {
           <aside
             ref={sidebarRef}
             id="conversations-drawer"
-            aria-label="Conversations"
+            aria-label={t('Conversations')}
             className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] min-h-0 bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:static md:z-auto md:w-72 md:shrink-0 md:translate-x-0 md:shadow md:rounded-lg ${
               sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
             }`}
@@ -736,7 +746,7 @@ export function ChatPage() {
                 type="button"
                 onClick={closeSidebar}
                 className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
-                aria-label="Close conversations menu"
+                aria-label={t('Close conversations menu')}
               >
                 {t('Close')}
               </button>
@@ -777,7 +787,7 @@ export function ChatPage() {
                     onChange={(e) => setPinnedOnly(e.target.checked)}
                     className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
-                  Pinned
+                  {t('Pinned')}
                 </label>
                 <label className="inline-flex items-center gap-1">
                   <input
@@ -786,7 +796,7 @@ export function ChatPage() {
                     onChange={(e) => setShowArchived(e.target.checked)}
                     className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
-                  Archived
+                  {t('Archived')}
                 </label>
               </div>
             </div>
@@ -794,7 +804,7 @@ export function ChatPage() {
             <div className="flex-1 overflow-y-auto border-t border-gray-200 min-h-0">
               {conversations.length === 0 && (
                 <p className="text-sm text-gray-500 text-center py-6 px-3">
-                  No conversations yet.
+                  {t('No conversations yet.')}
                 </p>
               )}
               <ul className="divide-y divide-gray-100">
@@ -809,11 +819,11 @@ export function ChatPage() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-gray-900 truncate">
-                          {c.title || 'Untitled chat'}
+                          {c.title || t('Untitled chat')}
                         </span>
                         {c.pinned && (
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-600 shrink-0">
-                            Pinned
+                            {t('Pinned')}
                           </span>
                         )}
                       </div>
@@ -842,7 +852,7 @@ export function ChatPage() {
                     ref={menuButtonRef}
                     type="button"
                     className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 shrink-0"
-                    aria-label="Open conversations menu"
+                    aria-label={t('Open conversations menu')}
                     aria-expanded={sidebarOpen}
                     aria-controls="conversations-drawer"
                     onClick={openSidebar}
@@ -858,7 +868,7 @@ export function ChatPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {activeConversation?.title || 'New chat'}
+                      {activeConversation?.title || t('New chat')}
                     </p>
                     <p className="text-xs text-gray-500 truncate">{companyName}</p>
                   </div>
@@ -878,14 +888,14 @@ export function ChatPage() {
                         activeConversation.status,
                       ) && (
                         <option value={activeConversation.status} disabled>
-                          {STATUS_LABELS[activeConversation.status]} (platform)
+                          {t(STATUS_LABELS[activeConversation.status])} ({t('platform')})
                         </option>
                       )}
                       {CONVERSATION_STATUSES.map((s) => (
                         <option key={s} value={s}>
                           {s === 'open' && isConversationFinal(activeConversation.status)
-                            ? 'Reopen'
-                            : STATUS_LABELS[s]}
+                            ? t('Reopen')
+                            : t(STATUS_LABELS[s])}
                         </option>
                       ))}
                     </select>
@@ -898,7 +908,7 @@ export function ChatPage() {
                       }
                       className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                     >
-                      {activeConversation.pinned ? 'Unpin' : 'Pin'}
+                      {t(activeConversation.pinned ? 'Unpin' : 'Pin')}
                     </button>
                     <button
                       type="button"
@@ -909,14 +919,14 @@ export function ChatPage() {
                       }
                       className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                     >
-                      {activeConversation.archived ? 'Unarchive' : 'Archive'}
+                      {t(activeConversation.archived ? 'Unarchive' : 'Archive')}
                     </button>
                     <button
                       type="button"
                       onClick={() => void onDelete(activeConversation.id)}
                       className="text-xs font-medium text-rose-600 hover:text-rose-800"
                     >
-                      Delete
+                      {t('Delete')}
                     </button>
                   </div>
                 )}
@@ -927,17 +937,17 @@ export function ChatPage() {
                     <div
                       className="flex items-center gap-1"
                       role="group"
-                      aria-label="Rate this conversation"
+                      aria-label={t('Rate this conversation')}
                     >
                       <span className="text-[10px] text-gray-400 mr-1">
-                        Rate
+                        {t('Rate')}
                       </span>
                       {[1, 2, 3, 4, 5].map((star) => (
                         <button
                           key={star}
                           type="button"
-                          title={`Rate ${star} star${star > 1 ? 's' : ''}${
-                            activeConversation.rating === star ? ' (clear)' : ''
+                          title={`${t('Rate')} ${star}/5${
+                            activeConversation.rating === star ? ` (${t('clear')})` : ''
                           }`}
                           onClick={() =>
                             void patchConversation(activeConversation.id, {
@@ -957,13 +967,13 @@ export function ChatPage() {
                     </div>
                   ) : (
                     <span className="text-[10px] text-gray-400">
-                      Rate once the chat is solved / not solved
+                      {t('Rate once the chat is solved / not solved')}
                     </span>
                   )}
                   <span className="text-[10px] text-gray-400 truncate">
                     {activeConversation.guidelineSnapshotHash
-                      ? `Guidance bound: ${activeConversation.guidelineSnapshotHash.slice(0, 12)}…`
-                      : 'No guidance bound'}
+                      ? `${t('Guidance bound')}: ${activeConversation.guidelineSnapshotHash.slice(0, 12)}…`
+                      : t('No guidance bound')}
                   </span>
                 </div>
               )}
@@ -974,8 +984,8 @@ export function ChatPage() {
                 {messages.length === 0 && (
                   <p className="text-sm text-gray-500 text-center py-8">
                     {activeId
-                      ? 'No messages in this conversation yet.'
-                      : 'Type a question to get started.'}
+                      ? t('No messages in this conversation yet.')
+                      : t('Type a question to get started.')}
                   </p>
                 )}
                 {messages.map((msg) => {
@@ -1004,7 +1014,7 @@ export function ChatPage() {
                         {isInFlight(msg.status) ? (
                           <div className="space-y-2">
                             <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
-                              Thinking…
+                              {t('Thinking…')}
                             </span>
                             <button
                               type="button"
@@ -1012,13 +1022,13 @@ export function ChatPage() {
                               disabled={stoppingIds.has(msg.id)}
                               className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-60"
                             >
-                              {stoppingIds.has(msg.id) ? 'Stopping…' : 'Stop'}
+                              {stoppingIds.has(msg.id) ? t('Stopping…') : t('Stop')}
                             </button>
                           </div>
                         ) : msg.status === 'failed' ? (
                           <div className="space-y-2">
                             <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700 break-words">
-                              {ASSISTANT_FAILURE_COPY}
+                              {t(ASSISTANT_FAILURE_COPY)}
                             </span>
                             {!viewOnly && (
                               <button
@@ -1026,13 +1036,13 @@ export function ChatPage() {
                                 onClick={() => void onRetry(msg.id)}
                                 className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                               >
-                                Retry
+                                {t('Retry')}
                               </button>
                             )}
                           </div>
                         ) : msg.status === 'cancelled' ? (
                           <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-50 text-gray-400 italic">
-                            Stopped
+                            {t('Stopped')}
                           </span>
                         ) : (
                           <span
@@ -1064,9 +1074,7 @@ export function ChatPage() {
             {viewOnly && activeConversation && (
               <div className="px-3 sm:px-4 py-2 text-sm text-amber-800 bg-amber-50 border-t border-amber-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
                 <span>
-                  This conversation is{' '}
-                  {STATUS_LABELS[activeConversation.status].toLowerCase()} —
-                  reopen to continue.
+                  {t(VIEW_ONLY_COPY[activeConversation.status])}
                 </span>
                 <button
                   type="button"
@@ -1100,10 +1108,10 @@ export function ChatPage() {
                   disabled={viewOnly}
                   placeholder={
                     viewOnly
-                      ? 'This chat is marked as finished — reopen to continue'
+                      ? t('This chat is marked as finished — reopen to continue')
                       : hasInFlight
-                        ? 'The assistant is thinking — send to redirect it'
-                        : 'Type your question… (Shift+Enter for new line)'
+                        ? t('The assistant is thinking — send to redirect it')
+                        : t('Type your question… (Shift+Enter for new line)')
                   }
                   className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[3rem] max-h-[8rem] disabled:bg-gray-100 disabled:text-gray-400 w-full"
                 />
@@ -1112,7 +1120,7 @@ export function ChatPage() {
                   disabled={sending || viewOnly || !input.trim()}
                   className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shrink-0 w-full sm:w-auto"
                 >
-                  {sending ? 'Sending…' : hasInFlight ? 'Send' : 'Send'}
+                  {sending ? t('Sending…') : t('Send')}
                 </button>
               </form>
             </div>

@@ -31,7 +31,7 @@ export function LoginPage() {
       window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-          Continuing…
+          {t('Continuing…')}
         </div>
       );
     }
@@ -69,7 +69,7 @@ export function LoginPage() {
           {t('AI Support Assistant')}
         </h1>
         <p className="mt-2 text-center text-sm text-gray-600">
-          {validReturnUrl ? 'Sign in to continue' : 'Sign in to your account'}
+          {validReturnUrl ? t('Sign in to continue') : t('Sign in to your account')}
         </p>
       </div>
 
@@ -81,7 +81,7 @@ export function LoginPage() {
                 htmlFor="email"
                 className="block text-sm font-medium text-gray-700"
               >
-                Email
+                {t('Email')}
               </label>
               <input
                 id="email"
@@ -99,7 +99,7 @@ export function LoginPage() {
                 htmlFor="password"
                 className="block text-sm font-medium text-gray-700"
               >
-                Password
+                {t('Password')}
               </label>
               <input
                 id="password"
@@ -114,7 +114,7 @@ export function LoginPage() {
 
             {error && (
               <p className="text-sm text-red-600" role="alert">
-                {error}
+                {t(error)}
               </p>
             )}
 
@@ -123,7 +123,7 @@ export function LoginPage() {
               disabled={submitting}
               className="w-full flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-60"
             >
-              {submitting ? 'Signing in…' : 'Sign in'}
+              {submitting ? t('Signing in…') : t('Sign in')}
             </button>
           </form>
         </div>

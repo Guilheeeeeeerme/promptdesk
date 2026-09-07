@@ -8,6 +8,7 @@ import {
   CHAT_GENERATE_QUEUE,
   ChatAbortedError,
   chatAbortKey,
+  supportLocaleOf,
   type ChatGenerateJobData,
   type ChatProvider,
 } from './chat.constants';
@@ -228,7 +229,7 @@ export class ChatGenerateProcessor extends WorkerHost {
         placeholders,
         mode: job.data.mode ?? ('agent' as const),
         model,
-        locale: job.data.locale ?? 'en-US',
+        locale: supportLocaleOf(job.data.locale),
       };
 
       const rawReply =
