@@ -9,6 +9,10 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import {
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from '../../common/supported-locales';
 import { MAX_CHAT_MESSAGE_LENGTH } from '../chat.guards';
 
 export const CONVERSATION_STATUSES = [
@@ -73,4 +77,9 @@ export class CreateChatDto {
   @IsString()
   @MaxLength(64)
   idempotencyKey?: string;
+
+  /** Client UI locale; used only when the user has no saved preference. */
+  @IsOptional()
+  @IsIn(SUPPORTED_LOCALES)
+  locale?: SupportedLocale;
 }

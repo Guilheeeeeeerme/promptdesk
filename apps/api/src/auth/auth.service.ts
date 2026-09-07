@@ -6,8 +6,12 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  parseSupportedLocale,
+  type SupportedLocale,
+} from '../common/supported-locales';
 import { SessionService } from './session.service';
-import { SessionData, SessionRole, isPlatformRole } from './session.types';
+import { SessionData, isPlatformRole } from './session.types';
 
 @Injectable()
 export class AuthService {
@@ -33,7 +37,7 @@ export class AuthService {
 
     let activeCompanyId: string | null = user.companyId;
 
-    if (isPlatformRole(user.role as SessionRole)) {
+    if (isPlatformRole(user.role)) {
       if (!activeCompanyId) {
         const firstCompany = await this.prisma.company.findFirst({
           orderBy: { createdAt: 'asc' },
@@ -44,7 +48,7 @@ export class AuthService {
 
     const { token, session } = await this.sessions.create({
       userId: user.id,
-      role: user.role as SessionRole,
+      role: user.role,
       activeCompanyId,
     });
 
@@ -83,10 +87,20 @@ export class AuthService {
     return this.buildAuthResponse(token, updated);
   }
 
-  private async buildAuthResponse(
-    token: string | null,
+  async updateLocale(
+    token: string,
     session: SessionData,
+    locale: SupportedLocale,
   ) {
+    const user = await this.prisma.user.update({
+      where: { id: session.userId },
+      data: { locale },
+    });
+    if (!user) throw new UnauthorizedException('User no longer exists');
+    return this.buildAuthResponse(token, session);
+  }
+
+  private async buildAuthResponse(token: string | null, session: SessionData) {
     const user = await this.prisma.user.findUnique({
       where: { id: session.userId },
     });
@@ -111,6 +125,7 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
+        locale: parseSupportedLocale(user.locale),
       },
       activeCompany,
     };

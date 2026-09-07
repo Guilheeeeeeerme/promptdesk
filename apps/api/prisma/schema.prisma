@@ -73,6 +73,7 @@ model User {
   passwordHash String
   name         String
   role         Role
+  locale       String?
   companyId    String?
   company      Company? @relation(fields: [companyId], references: [id])
   createdAt    DateTime @default(now())

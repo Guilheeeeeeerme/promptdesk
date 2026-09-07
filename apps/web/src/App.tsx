@@ -9,6 +9,8 @@ import { HistoryPage } from './HistoryPage';
 import { SessionHome } from './SessionHome';
 import { SsoHandoffPage } from './SsoHandoffPage';
 import { UsersPage } from './UsersPage';
+import { LocaleProvider } from './locale';
+import { useAuth } from './auth';
 
 function ChatRedirect() {
   const token = getToken();
@@ -23,8 +25,10 @@ function ChatRedirect() {
 }
 
 export default function App() {
+  const { session } = useAuth();
   return (
-    <Routes>
+    <LocaleProvider initialLocale={session?.user.locale}>
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/sso/handoff" element={<SsoHandoffPage />} />
       <Route element={<AppShell />}>
@@ -36,6 +40,7 @@ export default function App() {
         <Route path="/users" element={<UsersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </LocaleProvider>
   );
 }

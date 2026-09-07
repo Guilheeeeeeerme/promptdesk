@@ -5,6 +5,7 @@ import {
   buildSupportPrompt,
   type SupportPromptMessage,
   type SupportPromptMode,
+  type SupportLocale,
 } from "./chat.constants";
 import {
   type PlaceholderValues,
@@ -73,6 +74,7 @@ export class OpenAiService {
     placeholders: PlaceholderValues;
     mode?: SupportPromptMode;
     model?: string;
+    locale?: SupportLocale;
   }): Promise<string> {
     const modelName = this.getModelName(params.model);
     const prompt = buildSupportPrompt({
@@ -81,6 +83,7 @@ export class OpenAiService {
       agentRequest: params.userMessage,
       knownContext: params.placeholders,
       mode: params.mode,
+      locale: params.locale,
     });
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [

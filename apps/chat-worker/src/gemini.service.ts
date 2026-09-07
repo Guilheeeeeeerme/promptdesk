@@ -5,6 +5,7 @@ import {
   buildSupportPrompt,
   type SupportPromptMessage,
   type SupportPromptMode,
+  type SupportLocale,
 } from "./chat.constants";
 import {
   type PlaceholderValues,
@@ -59,6 +60,7 @@ export class GeminiService {
     placeholders: PlaceholderValues;
     mode?: SupportPromptMode;
     model?: string;
+    locale?: SupportLocale;
   }): Promise<string> {
     const modelName = this.getModelName(params.model);
     const prompt = buildSupportPrompt({
@@ -67,6 +69,7 @@ export class GeminiService {
       agentRequest: params.userMessage,
       knownContext: params.placeholders,
       mode: params.mode,
+      locale: params.locale,
     });
     const model = this.client.getGenerativeModel({
       model: modelName,

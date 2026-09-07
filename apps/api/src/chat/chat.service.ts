@@ -12,6 +12,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { MessageRole, MessageStatus } from '@prisma/chat-client';
 import { Queue } from 'bullmq';
 import { SessionData } from '../auth/session.types';
+import { parseSupportedLocale } from '../common/supported-locales';
 import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -111,11 +112,7 @@ export class ChatService {
   }
 
   private async removeQueueJobsForMessage(assistantMessageId: string) {
-    const jobs = await this.chatQueue.getJobs([
-      'waiting',
-      'delayed',
-      'active',
-    ]);
+    const jobs = await this.chatQueue.getJobs(['waiting', 'delayed', 'active']);
     await Promise.all(
       jobs
         .filter((job) => job.data?.assistantMessageId === assistantMessageId)
@@ -240,9 +237,7 @@ export class ChatService {
     const count = await this.redis.getClient().incr(key);
 
     if (count === 1) {
-      await this.redis
-        .getClient()
-        .expire(key, CHAT_RATE_LIMIT_WINDOW_SECONDS);
+      await this.redis.getClient().expire(key, CHAT_RATE_LIMIT_WINDOW_SECONDS);
     }
 
     if (count > this.rateLimitPerMinute) {
@@ -430,6 +425,12 @@ export class ChatService {
           userId: session.userId,
           conversationId: conversation.id,
           provider: 'gemini',
+          // Saved preference wins; otherwise the client UI locale (which
+          // itself fell back to browser language, then English).
+          locale:
+            parseSupportedLocale(user.locale) ??
+            parseSupportedLocale(dto.locale) ??
+            'en-US',
         });
       } catch (enqueueError) {
         await this.markEnqueueFailure(
@@ -558,7 +559,11 @@ export class ChatService {
     };
   }
 
-  async retryAssistantMessage(session: SessionData, assistantMessageId: string) {
+  async retryAssistantMessage(
+    session: SessionData,
+    assistantMessageId: string,
+    dto?: Pick<CreateChatDto, 'locale'>,
+  ) {
     if (!session.activeCompanyId) {
       throw new BadRequestException('No active company in session');
     }
@@ -620,14 +625,26 @@ export class ChatService {
       },
     });
 
-    await this.enqueueGenerate({
-      assistantMessageId: updated.id,
-      userMessageId: message.parentMessageId,
-      companyId: message.companyId,
-      userId: session.userId,
-      conversationId: message.conversationId ?? undefined,
-      provider: 'gemini',
-    }, `chat-gen-${updated.id}-gemini-retry-${Date.now()}`);
+    const user = await this.prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { locale: true },
+    });
+
+    await this.enqueueGenerate(
+      {
+        assistantMessageId: updated.id,
+        userMessageId: message.parentMessageId,
+        companyId: message.companyId,
+        userId: session.userId,
+        conversationId: message.conversationId ?? undefined,
+        provider: 'gemini',
+        locale:
+          parseSupportedLocale(user?.locale) ??
+          parseSupportedLocale(dto?.locale) ??
+          'en-US',
+      },
+      `chat-gen-${updated.id}-gemini-retry-${Date.now()}`,
+    );
 
     return {
       status: 'pending' as const,

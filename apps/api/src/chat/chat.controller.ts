@@ -47,15 +47,13 @@ export class ChatController {
   retry(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
+    @Body() body?: Pick<CreateChatDto, 'locale'>,
   ) {
-    return this.chatService.retryAssistantMessage(req.session, id);
+    return this.chatService.retryAssistantMessage(req.session, id, body);
   }
 
   @Post('messages/:id/stop')
-  stop(
-    @Req() req: AuthenticatedRequest,
-    @Param('id') id: string,
-  ) {
+  stop(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.chatService.stopAssistantMessage(req.session, id);
   }
 }

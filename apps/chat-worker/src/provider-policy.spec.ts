@@ -1,9 +1,7 @@
-import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
 import {
   createGeminiFirstGuidelineProvider,
   type GuidelineModelProvider,
-} from './provider-policy.ts';
+} from './provider-policy';
 
 function provider(
   implementation: (content: string, model?: string) => Promise<unknown>,
@@ -30,8 +28,8 @@ describe('Gemini-first cheapest-model policy', () => {
 
     const result = await selected.validateGuideline('policy');
 
-    assert.deepEqual(result, { status: 'valid' });
-    assert.deepEqual(calls, ['gemini:gemini-cheapest']);
+    expect(result).toEqual({ status: 'valid' });
+    expect(calls).toEqual(['gemini:gemini-cheapest']);
   });
 
   it('tries the next-cheapest Gemini model before OpenAI', async () => {
@@ -53,8 +51,8 @@ describe('Gemini-first cheapest-model policy', () => {
 
     const result = await selected.validateGuideline('policy');
 
-    assert.deepEqual(result, { status: 'invalid' });
-    assert.deepEqual(calls, ['gemini:gemini-cheapest', 'gemini:gemini-next']);
+    expect(result).toEqual({ status: 'invalid' });
+    expect(calls).toEqual(['gemini:gemini-cheapest', 'gemini:gemini-next']);
   });
 
   it('falls back to the cheapest OpenAI model only after Gemini models fail', async () => {
@@ -76,8 +74,8 @@ describe('Gemini-first cheapest-model policy', () => {
 
     const result = await selected.validateGuideline('policy');
 
-    assert.deepEqual(result, { status: 'valid' });
-    assert.deepEqual(calls, [
+    expect(result).toEqual({ status: 'valid' });
+    expect(calls).toEqual([
       'gemini:gemini-cheapest',
       'gemini:gemini-next',
       'openai:gpt-cheapest',
@@ -101,11 +99,10 @@ describe('Gemini-first cheapest-model policy', () => {
       false,
     );
 
-    await assert.rejects(
-      selected.validateGuideline('policy'),
+    await expect(selected.validateGuideline('policy')).rejects.toThrow(
       /Gemini unavailable/,
     );
-    assert.deepEqual(calls, ['gemini:gemini-cheapest']);
+    expect(calls).toEqual(['gemini:gemini-cheapest']);
   });
 
 });

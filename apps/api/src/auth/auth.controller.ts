@@ -12,6 +12,7 @@ import type { AuthenticatedRequest } from './auth.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { UpdateContextDto } from './dto/update-context.dto';
+import { UpdateLocaleDto } from './dto/update-locale.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -45,5 +46,14 @@ export class AuthController {
       req.session,
       body.companyId,
     );
+  }
+
+  @Patch('locale')
+  @UseGuards(AuthGuard)
+  updateLocale(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: UpdateLocaleDto,
+  ) {
+    return this.authService.updateLocale(req.sessionToken, req.session, body.locale);
   }
 }

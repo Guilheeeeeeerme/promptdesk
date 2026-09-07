@@ -6,10 +6,11 @@ import {
   type MouseEvent,
 } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { appendTokenToReturnUrl } from '@shared/auth';
+import { appendTokenToReturnUrl, LOCALE_LABELS, SUPPORTED_LOCALES } from '@shared/auth';
 import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
 import type { Role } from './types';
+import { useLocale } from './locale';
 
 const navItems: Array<{
   to: string;
@@ -61,6 +62,7 @@ export function AppShell() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
+  const { locale, setLocale, t } = useLocale();
 
   useEffect(() => {
     setNavOpen(false);
@@ -143,7 +145,7 @@ export function AppShell() {
       <aside className="hidden md:flex md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 bg-white border-r border-gray-200 flex-col">
         <div className="px-6 py-6 border-b border-gray-100">
           <h1 className="text-xl font-bold text-indigo-600 leading-tight">
-            AI Support Assistant
+            {t('AI Support Assistant')}
           </h1>
         </div>
         {canSwitchCompany && (
@@ -152,7 +154,7 @@ export function AppShell() {
               htmlFor="company-switcher"
               className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
             >
-              Company
+              {t('Company')}
             </label>
             <select
               id="company-switcher"
@@ -172,10 +174,10 @@ export function AppShell() {
         {!canSwitchCompany && (
           <div className="px-4 py-5 border-b border-gray-100">
             <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-              Company
+              {t('Company')}
             </span>
             <span className="block truncate text-sm font-medium text-gray-900">
-              {session.activeCompany?.name ?? 'No company'}
+              {session.activeCompany?.name ?? t('No company')}
             </span>
           </div>
         )}
@@ -192,7 +194,7 @@ export function AppShell() {
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
-                {item.label}
+                {t(item.label)}
               </Link>
             );
           })}
@@ -232,7 +234,7 @@ export function AppShell() {
                 aria-label="Chat (opens in new tab)"
                 className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-700"
               >
-                Chat
+                {t('Chat')}
                 <ExternalLinkIcon className="size-3.5 shrink-0" />
               </a>
                 <div className="relative">
@@ -253,13 +255,19 @@ export function AppShell() {
                       <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
                         {session.user.email}
                       </div>
+                      <label className="block px-3 pt-2 text-xs text-gray-500" htmlFor="language-select">{t('Language')}</label>
+                      <select id="language-select" value={locale} onChange={(e) => void setLocale(e.target.value as typeof locale)} className="mx-3 my-1 w-[calc(100%-1.5rem)] rounded border border-gray-300 px-2 py-1 text-sm">
+                        {SUPPORTED_LOCALES.map((supported) => (
+                          <option key={supported} value={supported}>{LOCALE_LABELS[supported]}</option>
+                        ))}
+                      </select>
                       <button
                         type="button"
                         role="menuitem"
                         onClick={() => void logout()}
                         className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
                       >
-                        Log out
+                        {t('Log out')}
                       </button>
                     </div>
                   )}
@@ -287,14 +295,14 @@ export function AppShell() {
         }`}
       >
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-gray-900">Menu</p>
+          <p className="text-sm font-semibold text-gray-900">{t('Menu')}</p>
           <button
             type="button"
             onClick={() => setNavOpen(false)}
             className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
             aria-label="Close navigation menu"
           >
-            Close
+            {t('Close')}
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
@@ -322,7 +330,7 @@ export function AppShell() {
             aria-label="Chat (opens in new tab)"
             className="flex items-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
-            Chat
+            {t('Chat')}
             <ExternalLinkIcon className="size-3.5 shrink-0" />
           </a>
         </nav>
@@ -355,7 +363,7 @@ export function AppShell() {
               Company
             </span>
             <span className="block truncate text-sm font-medium text-gray-900">
-              {session.activeCompany?.name ?? 'No company'}
+              {session.activeCompany?.name ?? t('No company')}
             </span>
           </div>
         )}
