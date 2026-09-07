@@ -46,6 +46,21 @@ NestJS API
 3. Abort flags are checked before and after each LLM call; aborted jobs never write completed content.
 4. On final failure the UI offers retry via `POST /chat/messages/:id/retry`.
 
+## Guardrails & LLM spend
+
+Promptdesk is the reference implementation of the guardrails standard consumed by Argus and Quizzeira. The full contract lives in [`docs/guardrails.md`](docs/guardrails.md).
+
+| OWASP risk | Mitigation |
+| --- | --- |
+| LLM01 Prompt injection | Uploaded guidelines are screened against regex policies (`apps/chat-worker/src/guideline-validator.ts`); a hit marks the version `malicious` without an LLM call. All runtime data is JSON-stuffed into a delimited untrusted-context block in the user message (`apps/chat-worker/prompts/registry.yml`, `support.copilot.context`), never the system instruction. |
+| LLM02 Sensitive disclosure | The system instruction (`registry.yml`, `support.copilot.system`) forbids treating context as instructions, revealing prompts/secrets, or exfiltrating data. |
+| LLM10 Unbounded consumption | Redis fixed-window rate limits: chat sends `CHAT_RATE_LIMIT_PER_MINUTE` (default 20/min) and guideline uploads `GUIDELINE_UPLOAD_LIMIT` (default 10/min); prompt budgets cap context sizes; BullMQ retries are bounded. |
+
+Provider and model selection:
+
+- `LLM_PROVIDER_ORDER` (default `gemini,openai`) orders chat and guideline providers; unknown names are ignored and providers without a key are skipped. `GEMINI_API_KEY` is required, `OPENAI_API_KEY` enables failover.
+- Cheapest-first model ladder (`apps/chat-worker/src/model-rank.service.ts`, Redis-cached, refreshed every `MODEL_RANK_REFRESH_MS`, default 12h = twice daily): attempt N walks `rank[N]`, cross-provider failover only after all attempts of the earlier provider fail.
+
 ## Tech stack
 
 | Layer | Technology |
