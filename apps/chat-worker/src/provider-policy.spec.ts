@@ -1,5 +1,6 @@
 import {
   createGeminiFirstGuidelineProvider,
+  resolveProviderOrder,
   type GuidelineModelProvider,
 } from './provider-policy';
 
@@ -105,4 +106,78 @@ describe('Gemini-first cheapest-model policy', () => {
     expect(calls).toEqual(['gemini:gemini-cheapest']);
   });
 
+});
+
+describe('resolveProviderOrder', () => {
+  it('defaults to gemini first, openai fallback', () => {
+    expect(resolveProviderOrder(undefined, { gemini: true, openai: true })).toEqual(
+      ['gemini', 'openai'],
+    );
+    expect(resolveProviderOrder(null, { gemini: true, openai: true })).toEqual(
+      ['gemini', 'openai'],
+    );
+    expect(resolveProviderOrder('', { gemini: true, openai: true })).toEqual([
+      'gemini',
+      'openai',
+    ]);
+  });
+
+  it('ignores unknown provider names', () => {
+    expect(
+      resolveProviderOrder('anthropic,gemini,bogus', {
+        gemini: true,
+        openai: true,
+      }),
+    ).toEqual(['gemini']);
+    // Unknown names only → falls back to the default order.
+    expect(
+      resolveProviderOrder('anthropic,bogus', { gemini: true, openai: true }),
+    ).toEqual(['gemini', 'openai']);
+  });
+
+  it('skips providers whose key is not configured', () => {
+    expect(
+      resolveProviderOrder('gemini,openai', { gemini: true, openai: false }),
+    ).toEqual(['gemini']);
+  });
+
+  it('honors a reordered openai-first order', () => {
+    expect(
+      resolveProviderOrder('openai,gemini', { gemini: true, openai: true }),
+    ).toEqual(['openai', 'gemini']);
+  });
+
+  it('trims whitespace, lowercases, and deduplicates', () => {
+    expect(
+      resolveProviderOrder(' OpenAI , gemini, openai ', {
+        gemini: true,
+        openai: true,
+      }),
+    ).toEqual(['openai', 'gemini']);
+  });
+});
+
+describe('ordered guideline provider', () => {
+  it('tries OpenAI first when the resolved order puts it first', async () => {
+    const calls: string[] = [];
+    const selected = createGeminiFirstGuidelineProvider(
+      provider(async (_, model) => {
+        calls.push(`gemini:${model}`);
+        return { status: 'valid' };
+      }),
+      ['gemini-cheapest'],
+      provider(async (_, model) => {
+        calls.push(`openai:${model}`);
+        return { status: 'valid' };
+      }),
+      ['gpt-cheapest'],
+      true,
+      ['openai', 'gemini'],
+    );
+
+    const result = await selected.validateGuideline('policy');
+
+    expect(result).toEqual({ status: 'valid' });
+    expect(calls).toEqual(['openai:gpt-cheapest']);
+  });
 });
