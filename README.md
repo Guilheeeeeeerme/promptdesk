@@ -276,3 +276,7 @@ scripts/up.sh
 3. Bootstrap with `getSession(apiBase)`
 4. Add origin to `SSO_RETURN_ORIGINS` and `CORS_ORIGIN`
 5. Add Compose service + build step in `scripts/up.sh`
+
+## Production
+
+Production builds, domains and Hostinger deployment are managed in the private [infra repository](https://github.com/Guilheeeeeeerme/infra). This repository retains local development configuration only. Its GitHub workflow notifies infra when deployment is enabled.
