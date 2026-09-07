@@ -5,6 +5,7 @@ import { AppShell } from './AppShell';
 import { CompaniesPage } from './CompaniesPage';
 import { SUPPORT_ORIGIN } from './api';
 import { LoginPage } from './LoginPage';
+import { RegisterPage } from './RegisterPage';
 import { HistoryPage } from './HistoryPage';
 import { SessionHome } from './SessionHome';
 import { SsoHandoffPage } from './SsoHandoffPage';
@@ -30,6 +31,7 @@ export default function App() {
     <LocaleProvider initialLocale={session?.user.locale}>
       <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route path="/sso/handoff" element={<SsoHandoffPage />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<SessionHome />} />

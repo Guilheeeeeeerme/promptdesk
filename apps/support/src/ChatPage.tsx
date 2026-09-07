@@ -439,16 +439,16 @@ export function ChatPage() {
         });
         await loadConversations();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't update — try again.");
+        setError(err instanceof Error ? err.message : t("Couldn't update — try again."));
       }
     },
-    [loadConversations],
+    [loadConversations, t],
   );
 
   const onDelete = useCallback(
     async (id: string) => {
       setError(null);
-      if (!window.confirm('Delete this conversation?')) return;
+      if (!window.confirm(t('Delete this conversation?'))) return;
       try {
         await apiFetch(`/chat/conversations/${id}`, { method: 'DELETE' });
         if (id === activeId) {
@@ -457,10 +457,10 @@ export function ChatPage() {
         }
         await loadConversations();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't delete — try again.");
+        setError(err instanceof Error ? err.message : t("Couldn't delete — try again."));
       }
     },
-    [activeId, loadConversations],
+    [activeId, loadConversations, t],
   );
 
   const onSend = useCallback(
@@ -536,7 +536,7 @@ export function ChatPage() {
         }
         void loadConversations().catch(() => undefined);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't send — try again.");
+        setError(err instanceof Error ? err.message : t("Couldn't send — try again."));
         setMessages((prev) =>
           prev.filter((m) => m.id !== localUserId && m.id !== localAssistantId),
         );
@@ -544,7 +544,7 @@ export function ChatPage() {
         setSending(false);
       }
     },
-    [input, sending, viewOnly, activeId, locale, trackPending, loadConversations],
+    [input, sending, viewOnly, activeId, locale, trackPending, loadConversations, t],
   );
 
   const onStop = useCallback(
@@ -573,7 +573,7 @@ export function ChatPage() {
           method: 'POST',
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't stop — try again.");
+        setError(err instanceof Error ? err.message : t("Couldn't stop — try again."));
       } finally {
         setStoppingIds((prev) => {
           const next = new Set(prev);
@@ -582,7 +582,7 @@ export function ChatPage() {
         });
       }
     },
-    [],
+    [t],
   );
 
   const onRetry = useCallback(
@@ -614,7 +614,7 @@ export function ChatPage() {
         );
       } catch (err) {
         pendingIdsRef.current.delete(assistantId);
-        setError(err instanceof Error ? err.message : "Couldn't retry — try again.");
+        setError(err instanceof Error ? err.message : t("Couldn't retry — try again."));
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, status: 'failed' } : m,
@@ -622,18 +622,18 @@ export function ChatPage() {
         );
       }
     },
-    [locale, trackPending],
+    [locale, trackPending, t],
   );
 
   if (loading || !session) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-        Loading…
+        {t('Loading…')}
       </div>
     );
   }
 
-  const companyName = session.activeCompany?.name ?? 'No company';
+  const companyName = session.activeCompany?.name ?? t('No company');
   const hasInFlight = messages.some(
     (m) => m.role === 'assistant' && isInFlight(m.status),
   );
@@ -992,7 +992,7 @@ export function ChatPage() {
                   const isAssistant = msg.role === 'assistant';
                   const isAgent = msg.role === 'agent';
                   const label = isAssistant
-                    ? 'AI'
+                    ? t('AI')
                     : isAgent
                       ? 'S'
                       : session.user.name.slice(0, 1).toUpperCase();
@@ -1085,7 +1085,7 @@ export function ChatPage() {
                   }
                   className="text-xs font-semibold text-amber-900 underline hover:no-underline shrink-0"
                 >
-                  Reopen
+                  {t('Reopen')}
                 </button>
               </div>
             )}

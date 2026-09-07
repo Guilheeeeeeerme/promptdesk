@@ -153,9 +153,7 @@ describe('CompaniesService safe guideline lifecycle', () => {
         validationReason: 'Cancelled by user',
       }),
     });
-    expect(queue.getJob).toHaveBeenCalledWith(
-      'guideline-validate-version-4',
-    );
+    expect(queue.getJob).toHaveBeenCalledWith('guideline-validate-version-4');
     expect(remove).toHaveBeenCalledTimes(1);
     expect(JSON.parse(publish.mock.calls[0][1])).toEqual(
       expect.objectContaining({

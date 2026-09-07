@@ -57,7 +57,7 @@ export class UsersService {
         data: {
           email: dto.email.toLowerCase(),
           name: dto.name,
-          role: dto.role as Role,
+          role: dto.role,
           passwordHash: await bcrypt.hash(dto.password, 12),
           companyId,
         },
@@ -94,9 +94,11 @@ export class UsersService {
         return tx.user.update({
           where: { id },
           data: {
-            ...(dto.email === undefined ? {} : { email: dto.email.toLowerCase() }),
+            ...(dto.email === undefined
+              ? {}
+              : { email: dto.email.toLowerCase() }),
             ...(dto.name === undefined ? {} : { name: dto.name }),
-            ...(dto.role === undefined ? {} : { role: dto.role as Role }),
+            ...(dto.role === undefined ? {} : { role: dto.role }),
             ...(dto.password === undefined
               ? {}
               : { passwordHash: await bcrypt.hash(dto.password, 12) }),
@@ -158,6 +160,12 @@ export class UsersService {
   ): void {
     if (session.role === 'root') return;
     if (session.role === 'admin' && targetRole !== 'root') return;
+    if (
+      session.role === 'owner' &&
+      ['owner', 'manager', 'agent'].includes(targetRole)
+    ) {
+      return;
+    }
     if (session.role === 'manager' && targetRole === 'agent') return;
     throw new ForbiddenException(
       targetId === session.userId
@@ -169,6 +177,9 @@ export class UsersService {
   private assertRoleMayCreate(actor: SessionRole, target: SessionRole): void {
     if (actor === 'root') return;
     if (actor === 'admin' && target !== 'root') return;
+    if (actor === 'owner' && ['owner', 'manager', 'agent'].includes(target)) {
+      return;
+    }
     if (actor === 'manager' && target === 'agent') return;
     throw new ForbiddenException('You cannot assign this role');
   }
@@ -183,7 +194,9 @@ export class UsersService {
       where: { role: Role.root, companyId },
     });
     if (roots <= 1) {
-      throw new BadRequestException('Cannot remove or demote the last root user');
+      throw new BadRequestException(
+        'Cannot remove or demote the last root user',
+      );
     }
   }
 
@@ -199,12 +212,18 @@ export class UsersService {
   }
 
   private rethrowDuplicateEmail(error: unknown): void {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
       throw new ConflictException('Email is already in use');
     }
   }
 
-  private async lockCompany(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
+  private async lockCompany(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ): Promise<void> {
     if (typeof tx.$executeRaw === 'function') {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`;
     }

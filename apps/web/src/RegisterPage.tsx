@@ -1,19 +1,21 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
+  ApiError,
   appendTokenToReturnUrl,
   getToken,
   isAllowedReturnUrl,
+  setToken,
+  type LoginResponse,
 } from '@shared/auth';
-import { getAllowedReturnOrigins } from './api';
-import { useAuth } from './auth';
+import { apiFetch, getAllowedReturnOrigins } from './api';
 import { useLocale } from './locale';
 
-export function LoginPage() {
-  const { session, loading, login } = useAuth();
+export function RegisterPage() {
   const { t } = useLocale();
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,19 +26,6 @@ export function LoginPage() {
     returnUrl && isAllowedReturnUrl(returnUrl, allowedOrigins)
       ? returnUrl
       : null;
-
-  if (!loading && session) {
-    const token = getToken();
-    if (validReturnUrl && token) {
-      window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
-      return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-          {t('Continuing…')}
-        </div>
-      );
-    }
-    return <Navigate to="/" replace />;
-  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -49,15 +38,23 @@ export function LoginPage() {
 
     setSubmitting(true);
     try {
-      await login(email, password);
+      const data = await apiFetch<LoginResponse>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ companyName: companyName.trim(), email, password }),
+      });
+      setToken(data.token);
       const token = getToken();
       if (validReturnUrl && token) {
         window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
         return;
       }
+      window.location.assign('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('Login failed'));
-    } finally {
+      if (err instanceof ApiError && err.status === 409) {
+        setError(t('This e-mail already belongs to an account.'));
+      } else {
+        setError(err instanceof Error ? t(err.message) : t('Registration failed'));
+      }
       setSubmitting(false);
     }
   }
@@ -69,13 +66,32 @@ export function LoginPage() {
           {t('AI Support Assistant')}
         </h1>
         <p className="mt-2 text-center text-sm text-gray-600">
-          {validReturnUrl ? t('Sign in to continue') : t('Sign in to your account')}
+          {t('Create your company account to get started')}
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={onSubmit}>
+            <div>
+              <label
+                htmlFor="company-name"
+                className="block text-sm font-medium text-gray-700"
+              >
+                {t('Company name')}
+              </label>
+              <input
+                id="company-name"
+                type="text"
+                autoComplete="organization"
+                required
+                minLength={2}
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+              />
+            </div>
+
             <div>
               <label
                 htmlFor="email"
@@ -104,8 +120,9 @@ export function LoginPage() {
               <input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
@@ -114,7 +131,7 @@ export function LoginPage() {
 
             {error && (
               <p className="text-sm text-red-600" role="alert">
-                {t(error)}
+                {error}
               </p>
             )}
 
@@ -123,15 +140,16 @@ export function LoginPage() {
               disabled={submitting}
               className="w-full flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-60"
             >
-              {submitting ? t('Signing in…') : t('Sign in')}
+              {submitting ? t('Registering…') : t('Sign up')}
             </button>
+
             <p className="text-center text-sm text-gray-600">
-              {t('Need a company account?')}{' '}
+              {t('Already have an account?')}{' '}
               <Link
-                to={validReturnUrl ? `/register?returnUrl=${encodeURIComponent(validReturnUrl)}` : '/register'}
+                to={validReturnUrl ? `/login?returnUrl=${encodeURIComponent(validReturnUrl)}` : '/login'}
                 className="font-medium text-indigo-600 hover:text-indigo-500"
               >
-                {t('Create a company account')}
+                {t('Sign in')}
               </Link>
             </p>
           </form>

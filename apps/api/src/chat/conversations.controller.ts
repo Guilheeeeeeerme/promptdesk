@@ -17,7 +17,10 @@ import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { ConversationsService } from './conversations.service';
 import type { ListConversationsFilters } from './conversations.service';
 import { CreateAgentMessageDto } from './dto/create-agent-message.dto';
-import { CreateConversationDto, UpdateConversationDto } from './dto/create-chat.dto';
+import {
+  CreateConversationDto,
+  UpdateConversationDto,
+} from './dto/create-chat.dto';
 
 @Controller('chat/conversations')
 @UseGuards(AuthGuard)

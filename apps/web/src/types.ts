@@ -4,7 +4,7 @@ export type {
   SessionPayload,
   SessionUser as User,
 } from '@shared/auth';
-export { isPlatformRole } from '@shared/auth';
+export { isPlatformRole, isCompanyRole } from '@shared/auth';
 
 export interface Company {
   id: string;

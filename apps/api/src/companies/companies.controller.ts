@@ -98,11 +98,7 @@ export class CompaniesController {
     @Param('id') id: string,
     @Param('versionId') versionId: string,
   ) {
-    return this.companies.cancelGuidelineVersion(
-      req.session,
-      id,
-      versionId,
-    );
+    return this.companies.cancelGuidelineVersion(req.session, id, versionId);
   }
 
   @Delete(':id/guidelines')

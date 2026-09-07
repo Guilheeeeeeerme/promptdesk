@@ -8,6 +8,7 @@ import {
 import { isPlatformRole } from '@shared/auth';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { useLocale } from './locale';
 import { FeedbackBanner, type Feedback } from './FeedbackBanner';
 
 type ConversationStatus =
@@ -91,27 +92,27 @@ function humanizeSeconds(seconds: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
-function messageIdentity(role: string): {
+function messageIdentity(role: string, translate: (v: string) => string): {
   label: string;
   bubbleClass: string;
   avatarClass: string;
 } {
   if (role === 'agent') {
     return {
-      label: 'Support (human)',
+      label: translate('Support (human)'),
       bubbleClass: 'bg-amber-50 text-gray-800',
       avatarClass: 'bg-amber-200 text-amber-800',
     };
   }
   if (role === 'assistant') {
     return {
-      label: 'AI',
+      label: translate('AI'),
       bubbleClass: 'bg-indigo-50 text-gray-900',
       avatarClass: 'bg-indigo-200 text-indigo-700',
     };
   }
   return {
-    label: 'Customer',
+    label: translate('Customer'),
     bubbleClass: 'bg-gray-50 text-gray-900',
     avatarClass: 'bg-gray-200 text-gray-600',
   };
@@ -124,8 +125,9 @@ function formatWhen(value: string | null): string {
 
 export function HistoryPage() {
   const { session } = useAuth();
+  const { t } = useLocale();
   const companyId = session?.activeCompany?.id ?? null;
-  const companyName = session?.activeCompany?.name ?? 'No company';
+  const companyName = session?.activeCompany?.name ?? t('No company');
   const isPlatform = isPlatformRole(session?.user.role ?? 'agent');
 
   const [items, setItems] = useState<ConversationDto[]>([]);
@@ -193,7 +195,7 @@ export function HistoryPage() {
     } catch (err) {
       if (requestId !== listRequestRef.current) return;
       setItems([]);
-      const message = err instanceof Error ? err.message : 'Failed to load history';
+      const message = err instanceof Error ? err.message : t('Failed to load history');
       setError(message);
       setFeedback({ tone: 'error', message });
     } finally {
@@ -201,7 +203,7 @@ export function HistoryPage() {
         setLoading(false);
       }
     }
-  }, [companyId, search]);
+  }, [companyId, search, t]);
 
   useEffect(() => {
     void loadList();
@@ -266,11 +268,11 @@ export function HistoryPage() {
         setDetail(null);
         setMessages([]);
         setDetailError(
-          err instanceof Error ? err.message : 'Failed to load conversation',
+          err instanceof Error ? err.message : t('Failed to load conversation'),
         );
         setFeedback({
           tone: 'error',
-          message: err instanceof Error ? err.message : 'Failed to load conversation',
+          message: err instanceof Error ? err.message : t('Failed to load conversation'),
         });
       } finally {
         if (requestId === detailRequestRef.current) {
@@ -278,13 +280,13 @@ export function HistoryPage() {
         }
       }
     })();
-  }, [activeSelectedId, companyId]);
+  }, [activeSelectedId, companyId, t]);
 
   const patchConversation = useCallback(
     async (id: string, patch: Record<string, unknown>) => {
       setError(null);
       setUpdatingConversationId(id);
-      setFeedback({ tone: 'info', message: 'Saving conversation changes…' });
+      setFeedback({ tone: 'info', message: t('Saving conversation changes…') });
       try {
         const updated = await apiFetch<ConversationDto>(
           `/chat/conversations/${id}`,
@@ -296,16 +298,16 @@ export function HistoryPage() {
         // Merge locally: the PATCH response omits platform owner fields.
         setDetail((prev) => (prev && prev.id === id ? { ...prev, ...updated } : prev));
         await loadList();
-        setFeedback({ tone: 'success', message: 'Conversation changes saved.' });
+        setFeedback({ tone: 'success', message: t('Conversation changes saved.') });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Update failed';
+        const message = err instanceof Error ? err.message : t('Update failed');
         setError(message);
         setFeedback({ tone: 'error', message });
       } finally {
         setUpdatingConversationId(null);
       }
     },
-    [loadList],
+    [loadList, t],
   );
 
   const sendReply = useCallback(
@@ -316,7 +318,7 @@ export function HistoryPage() {
 
       setError(null);
       setSendingReply(true);
-      setFeedback({ tone: 'info', message: 'Sending reply…' });
+      setFeedback({ tone: 'info', message: t('Sending reply…') });
       try {
         const message = await apiFetch<ChatMessageDto>(
           `/chat/conversations/${activeSelectedId}/messages`,
@@ -327,16 +329,16 @@ export function HistoryPage() {
         );
         setMessages((prev) => [...prev, message]);
         setReply('');
-        setFeedback({ tone: 'success', message: 'Reply sent.' });
+        setFeedback({ tone: 'success', message: t('Reply sent.') });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Reply failed';
+        const message = err instanceof Error ? err.message : t('Reply failed');
         setError(message);
         setFeedback({ tone: 'error', message });
       } finally {
         setSendingReply(false);
       }
     },
-    [reply, activeSelectedId, sendingReply],
+    [reply, activeSelectedId, sendingReply, t],
   );
 
   function selectConversation(id: string) {
@@ -359,24 +361,23 @@ export function HistoryPage() {
       <div className="mb-6 sm:mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-            Chat History
+            {t('Chat History')}
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Browse previous support interactions for{' '}
-            <span className="font-medium text-gray-800">{companyName}</span>
+            {t('Browse previous support interactions for {company}').replace('{company}', companyName)}
           </p>
         </div>
         <div
           className={`w-full sm:w-72 ${showMobileDetail ? 'hidden lg:block' : ''}`}
         >
           <label htmlFor="history-search" className="sr-only">
-            Search history
+            {t('Search history')}
           </label>
           <input
             id="history-search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search messages or titles…"
+            placeholder={t('Search messages or titles…')}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
           />
         </div>
@@ -386,30 +387,29 @@ export function HistoryPage() {
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="bg-white shadow rounded-lg px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Threads · {summary.windowDays}d
+              {t('Threads · {n}d').replace('{n}', String(summary.windowDays))}
             </p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {summary.total}
             </p>
             <p className="mt-0.5 text-xs text-gray-500">
-              {summary.open} still open
+              {t('Still open: {n}').replace('{n}', String(summary.open))}
             </p>
           </div>
           <div className="bg-white shadow rounded-lg px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Resolution rate
+              {t('Resolution rate')}
             </p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {summary.resolutionRate != null ? `${summary.resolutionRate}%` : '—'}
             </p>
             <p className="mt-0.5 text-xs text-gray-500">
-              {summary.solved} solved · {summary.notSolved} not ·{' '}
-              {summary.wontSolve} won't
+              {t("{solved} solved · {not} not solved · {wont} won't solve").replace('{solved}', String(summary.solved)).replace('{not}', String(summary.notSolved)).replace('{wont}', String(summary.wontSolve))}
             </p>
           </div>
           <div className="bg-white shadow rounded-lg px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Avg time to resolve
+              {t('Avg time to resolve')}
             </p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {summary.avgResolveSeconds != null
@@ -417,19 +417,18 @@ export function HistoryPage() {
                 : '—'}
             </p>
             <p className="mt-0.5 text-xs text-gray-500">
-              first finish → open timestamp
+              {t('first finish → open timestamp')}
             </p>
           </div>
           <div className="bg-white shadow rounded-lg px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              Rating average
+              {t('Rating average')}
             </p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {summary.avgRating != null ? `${summary.avgRating} / 5` : '—'}
             </p>
             <p className="mt-0.5 text-xs text-gray-500">
-              {summary.ratedCount} conversation
-              {summary.ratedCount === 1 ? '' : 's'} rated
+              {t('{n} conversations rated').replace('{n}', String(summary.ratedCount))}
             </p>
           </div>
         </div>
@@ -446,13 +445,13 @@ export function HistoryPage() {
           }`}
         >
           <div className="border-b border-gray-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-gray-900">Conversations</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{t('Conversations')}</h2>
           </div>
           {loading ? (
-            <p className="px-4 py-8 text-sm text-gray-500">Loading history…</p>
+            <p className="px-4 py-8 text-sm text-gray-500">{t('Loading history…')}</p>
           ) : items.length === 0 ? (
             <p className="px-4 py-8 text-sm text-gray-500">
-              No conversations for this company yet.
+              {t('No conversations for this company yet.')}
             </p>
           ) : (
             <ul className="divide-y divide-gray-100 max-h-[min(32rem,70dvh)] overflow-y-auto">
@@ -470,13 +469,13 @@ export function HistoryPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            {item.title?.trim() || 'Untitled chat'}
+                            {item.title?.trim() || t('Untitled chat')}
                           </p>
                           <p className="mt-1 text-xs text-gray-500 truncate">
                             {isPlatform && item.ownerName
                               ? `${item.ownerName} · `
                               : ''}
-                            {companyName} · {statusLabel(item.status)}
+                            {companyName} · {t(statusLabel(item.status))}
                           </p>
                         </div>
                         <time className="shrink-0 text-xs text-gray-400">
@@ -497,23 +496,23 @@ export function HistoryPage() {
           }`}
         >
           <div className="border-b border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-gray-900">Detail</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{t('Detail')}</h2>
             {showMobileDetail && (
               <button
                 type="button"
                 onClick={clearSelection}
                 className="lg:hidden text-sm font-medium text-indigo-600 hover:text-indigo-800"
               >
-                Back to list
+                {t('Back to list')}
               </button>
             )}
           </div>
           {!activeSelectedId ? (
             <p className="px-4 py-8 text-sm text-gray-500">
-              Select a conversation to view the full transcript.
+              {t('Select a conversation to view the full transcript.')}
             </p>
           ) : detailLoading ? (
-            <p className="px-4 py-8 text-sm text-gray-500">Loading detail…</p>
+            <p className="px-4 py-8 text-sm text-gray-500">{t('Loading detail…')}</p>
           ) : detailError ? (
             <p role="alert" className="px-4 py-8 text-sm text-red-600 break-words">
               {detailError}
@@ -522,14 +521,14 @@ export function HistoryPage() {
             <div className="px-4 py-4 space-y-4">
               <div className="space-y-1 text-sm">
                 <p>
-                  <span className="text-gray-500">Title:</span>{' '}
+                  <span className="text-gray-500">{t('Title:')}</span>{' '}
                   <span className="text-gray-900 break-words">
-                    {detail.title?.trim() || 'Untitled chat'}
+                    {detail.title?.trim() || t('Untitled chat')}
                   </span>
                 </p>
                 {isPlatform && (detail.ownerName || detail.ownerEmail) && (
                   <p>
-                    <span className="text-gray-500">Agent:</span>{' '}
+                    <span className="text-gray-500">{t('Agent:')}</span>{' '}
                     <span className="text-gray-900 break-words">
                       {[detail.ownerName, detail.ownerEmail]
                         .filter(Boolean)
@@ -538,11 +537,11 @@ export function HistoryPage() {
                   </p>
                 )}
                 <p>
-                  <span className="text-gray-500">Company:</span>{' '}
+                  <span className="text-gray-500">{t('Company:')}</span>{' '}
                   <span className="text-gray-900">{companyName}</span>
                 </p>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-500">Status:</span>
+                  <span className="text-gray-500">{t('Status:')}</span>
                   {isPlatform ? (
                     <select
                       value={detail.status}
@@ -570,28 +569,28 @@ export function HistoryPage() {
                   )}
                 </div>
                 <p>
-                  <span className="text-gray-500">Rating:</span>{' '}
+                  <span className="text-gray-500">{t('Rating:')}</span>{' '}
                   {isFinal(detail.status) ? (
                     <span className="text-gray-900">
                       {detail.rating
                         ? `${'★'.repeat(detail.rating)}${'☆'.repeat(5 - detail.rating)} (${detail.rating}/5)`
-                        : 'Not rated yet'}
+                        : t('Not rated yet')}
                     </span>
                   ) : (
                     <span className="text-gray-400">
-                      available once finished
+                      {t('available once finished')}
                     </span>
                   )}
                 </p>
                 <p>
-                  <span className="text-gray-500">Last activity:</span>{' '}
+                  <span className="text-gray-500">{t('Last activity:')}</span>{' '}
                   <span className="text-gray-900">
                     {formatWhen(detail.lastMessageAt ?? detail.createdAt)}
                   </span>
                 </p>
                 {detail.guidelineSnapshotHash && (
                   <p className="break-all">
-                    <span className="text-gray-500">Guideline snapshot:</span>{' '}
+                    <span className="text-gray-500">{t('Guideline snapshot:')}</span>{' '}
                     <span className="font-mono text-xs text-gray-700">
                       {detail.guidelineSnapshotHash.slice(0, 16)}…
                     </span>
@@ -601,10 +600,10 @@ export function HistoryPage() {
 
               <div className="border-t border-gray-100 pt-4 space-y-3 max-h-[min(24rem,55dvh)] overflow-y-auto">
                 {messages.length === 0 ? (
-                  <p className="text-sm text-gray-500">No messages.</p>
+                  <p className="text-sm text-gray-500">{t('No messages.')}</p>
                 ) : (
                   messages.map((msg) => {
-                    const identity = messageIdentity(msg.role);
+                    const identity = messageIdentity(msg.role, t);
                     return (
                       <article
                         key={msg.id}
@@ -616,7 +615,7 @@ export function HistoryPage() {
                             {formatWhen(msg.createdAt)}
                           </time>
                         </header>
-                        <p>{msg.content || '(pending)'}</p>
+                        <p>{msg.content || t('Pending')}</p>
                       </article>
                     );
                   })
@@ -627,7 +626,7 @@ export function HistoryPage() {
                 <div className="border-t border-gray-100 pt-4">
                   {isFinal(detail.status) ? (
                     <p className="text-xs text-gray-400">
-                      Reopen the conversation to reply manually.
+                      {t('Reopen the conversation to reply manually.')}
                     </p>
                   ) : (
                     <form
@@ -638,7 +637,7 @@ export function HistoryPage() {
                         htmlFor="manual-reply"
                         className="text-xs font-medium text-gray-500"
                       >
-                        Reply as support human (visible to the agent's chat)
+                        {t("Reply as support human (visible to the agent's chat)")}
                       </label>
                       <textarea
                         id="manual-reply"
@@ -651,7 +650,7 @@ export function HistoryPage() {
                           }
                         }}
                         rows={2}
-                        placeholder="Type a manual reply… (Shift+Enter for new line)"
+                        placeholder={t('Type a manual reply… (Shift+Enter for new line)')}
                         className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 resize-y min-h-[2.5rem] max-h-[8rem] w-full"
                       />
                       <button
@@ -659,7 +658,7 @@ export function HistoryPage() {
                         disabled={sendingReply || !reply.trim()}
                         className="self-start inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
                       >
-                        {sendingReply ? 'Sending…' : 'Send reply'}
+                        {sendingReply ? t('Sending…') : t('Send reply')}
                       </button>
                     </form>
                   )}

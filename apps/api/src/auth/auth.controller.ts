@@ -7,10 +7,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthGuard } from './auth.guard';
 import type { AuthenticatedRequest } from './auth.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 import { UpdateContextDto } from './dto/update-context.dto';
 import { UpdateLocaleDto } from './dto/update-locale.dto';
 
@@ -18,9 +20,23 @@ import { UpdateLocaleDto } from './dto/update-locale.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Post('register')
+  register(@Req() req: Request, @Body() body: RegisterDto) {
+    return this.authService.register(
+      body.companyName,
+      body.email,
+      body.password,
+      req.ip ?? 'unknown',
+    );
+  }
+
   @Post('login')
-  login(@Body() body: LoginDto) {
-    return this.authService.login(body.email, body.password);
+  login(@Req() req: Request, @Body() body: LoginDto) {
+    return this.authService.login(
+      body.email,
+      body.password,
+      req.ip ?? 'unknown',
+    );
   }
 
   @Post('logout')
@@ -54,6 +70,10 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() body: UpdateLocaleDto,
   ) {
-    return this.authService.updateLocale(req.sessionToken, req.session, body.locale);
+    return this.authService.updateLocale(
+      req.sessionToken,
+      req.session,
+      body.locale,
+    );
   }
 }

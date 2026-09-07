@@ -71,12 +71,7 @@ export class SessionService {
     const expireSeconds = ttl > 0 ? ttl : this.ttlSeconds;
     await this.redis
       .getClient()
-      .set(
-        this.key(token),
-        JSON.stringify(updated),
-        'EX',
-        expireSeconds,
-      );
+      .set(this.key(token), JSON.stringify(updated), 'EX', expireSeconds);
 
     return updated;
   }

@@ -22,7 +22,7 @@ const navItems: Array<{
   { to: '/history', label: 'History' },
   { to: '/companies', label: 'Companies' },
 
-  { to: '/users', label: 'Users', roles: ['root', 'admin', 'manager'] },
+  { to: '/users', label: 'Users', roles: ['root', 'admin', 'manager', 'owner'] },
 ];
 
 function supportHref(): string {
@@ -97,7 +97,7 @@ export function AppShell() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-        Loading session…
+        {t('Loading session…')}
       </div>
     );
   }
@@ -116,7 +116,7 @@ export function AppShell() {
     try {
       await switchCompany(companyId);
     } catch (err) {
-      setSwitchError(err instanceof Error ? err.message : 'Switch failed');
+      setSwitchError(err instanceof Error ? err.message : t('Switch failed'));
     } finally {
       setSwitching(false);
     }
@@ -181,7 +181,7 @@ export function AppShell() {
             </span>
           </div>
         )}
-        <nav aria-label="Main navigation" className="flex-1 px-3 py-5 space-y-1">
+        <nav aria-label={t('Main navigation')} className="flex-1 px-3 py-5 space-y-1">
           {visibleNavItems.map((item) => {
             const active = isActive(item);
             return (
@@ -210,7 +210,7 @@ export function AppShell() {
                 ref={menuButtonRef}
                 type="button"
                 className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 shrink-0"
-                aria-label="Open navigation menu"
+                aria-label={t('Open navigation menu')}
                 aria-expanded={navOpen}
                 aria-controls="main-nav-drawer"
                 onClick={() => setNavOpen(true)}
@@ -222,7 +222,7 @@ export function AppShell() {
                 </span>
               </button>
               <h1 className="md:hidden text-lg sm:text-xl font-bold text-indigo-600 truncate">
-                AI Support Assistant
+                {t('AI Support Assistant')}
               </h1>
             </div>
             <div className="flex items-center gap-2 sm:gap-4 shrink-0">
@@ -231,7 +231,7 @@ export function AppShell() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={openSupport}
-                aria-label="Chat (opens in new tab)"
+                aria-label={t('Chat (opens in new tab)')}
                 className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-700"
               >
                 {t('Chat')}
@@ -280,7 +280,7 @@ export function AppShell() {
       {navOpen && (
         <button
           type="button"
-          aria-label="Close navigation menu"
+          aria-label={t('Close navigation menu')}
           className="fixed inset-0 z-40 bg-gray-900/40 md:hidden"
           onClick={() => setNavOpen(false)}
         />
@@ -289,7 +289,7 @@ export function AppShell() {
       <aside
         ref={drawerRef}
         id="main-nav-drawer"
-        aria-label="Main navigation"
+        aria-label={t('Main navigation')}
         className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:hidden ${
           navOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
@@ -300,7 +300,7 @@ export function AppShell() {
             type="button"
             onClick={() => setNavOpen(false)}
             className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
-            aria-label="Close navigation menu"
+            aria-label={t('Close navigation menu')}
           >
             {t('Close')}
           </button>
@@ -318,7 +318,7 @@ export function AppShell() {
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                {item.label}
+                {t(item.label)}
               </Link>
             );
           })}
@@ -327,8 +327,8 @@ export function AppShell() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={openSupport}
-            aria-label="Chat (opens in new tab)"
             className="flex items-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            aria-label={t('Chat (opens in new tab)')}
           >
             {t('Chat')}
             <ExternalLinkIcon className="size-3.5 shrink-0" />
@@ -340,7 +340,7 @@ export function AppShell() {
               htmlFor="company-switcher-mobile"
               className="block text-xs font-medium text-gray-500 mb-1"
             >
-              Company
+              {t('Company')}
             </label>
             <select
               id="company-switcher-mobile"
@@ -360,7 +360,7 @@ export function AppShell() {
         {!canSwitchCompany && (
           <div className="border-t border-gray-100 px-4 py-3 sm:hidden">
             <span className="block text-xs font-medium text-gray-500 mb-1">
-              Company
+              {t('Company')}
             </span>
             <span className="block truncate text-sm font-medium text-gray-900">
               {session.activeCompany?.name ?? t('No company')}
@@ -368,7 +368,7 @@ export function AppShell() {
           </div>
         )}
         <div className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
-          {session.user.name} ({session.user.role})
+          {session.user.name} ({t(session.user.role)})
         </div>
       </aside>
 

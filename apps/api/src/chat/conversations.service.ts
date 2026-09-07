@@ -6,7 +6,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { ConversationStatus, MessageRole, MessageStatus } from '@prisma/chat-client';
+import {
+  ConversationStatus,
+  MessageRole,
+  MessageStatus,
+} from '@prisma/chat-client';
 import type { ChatMessage, Conversation } from '@prisma/chat-client';
 import { isPlatformRole } from '../auth/session.types';
 import type { SessionData } from '../auth/session.types';
@@ -87,7 +91,9 @@ export class ConversationsService {
     private readonly redis: RedisService,
   ) {}
 
-  private publishEvent(event: ChatAgentMessageEvent | ChatConversationUpdateEvent) {
+  private publishEvent(
+    event: ChatAgentMessageEvent | ChatConversationUpdateEvent,
+  ) {
     void this.redis
       .getClient()
       .publish(CHAT_EVENTS_CHANNEL, JSON.stringify(event))
@@ -264,7 +270,10 @@ export class ConversationsService {
     session: SessionData,
     conversationId: string,
   ): Promise<Conversation> {
-    const conversation = await this.getOwnedConversation(session, conversationId);
+    const conversation = await this.getOwnedConversation(
+      session,
+      conversationId,
+    );
 
     if (isConversationFinal(conversation.status)) {
       throw new ConflictException(CONVERSATION_SOLVED_CONFLICT);
@@ -455,7 +464,8 @@ export class ConversationsService {
       if (c.rating != null) ratings.push(c.rating);
     }
 
-    const finalized = byStatus.solved + byStatus.not_solved + byStatus.wont_solve;
+    const finalized =
+      byStatus.solved + byStatus.not_solved + byStatus.wont_solve;
     const avg = (xs: number[]) =>
       xs.length === 0
         ? null
@@ -468,11 +478,18 @@ export class ConversationsService {
       solved: byStatus.solved,
       notSolved: byStatus.not_solved,
       wontSolve: byStatus.wont_solve,
-      resolutionRate: finalized === 0 ? null : Math.round((byStatus.solved / finalized) * 1000) / 10,
+      resolutionRate:
+        finalized === 0
+          ? null
+          : Math.round((byStatus.solved / finalized) * 1000) / 10,
       avgResolveSeconds:
         resolveDurations.length === 0
           ? null
-          : Math.round(resolveDurations.reduce((a, b) => a + b, 0) / resolveDurations.length / 1000),
+          : Math.round(
+              resolveDurations.reduce((a, b) => a + b, 0) /
+                resolveDurations.length /
+                1000,
+            ),
       avgRating: avg(ratings),
       ratedCount: ratings.length,
     };
@@ -523,7 +540,7 @@ export class ConversationsService {
     // State machine: agents (owners) may only pick solved / not_solved and
     // reopen to open. wont_solve is the platform man-in-the-middle call.
     if (dto.status !== undefined) {
-      const next = dto.status as ConversationStatus;
+      const next = dto.status;
       if (
         !isPlatformRole(session.role) &&
         !OWNER_STATUS_CHOICES.includes(next)
@@ -545,13 +562,13 @@ export class ConversationsService {
         title: dto.title,
         pinned: dto.pinned,
         archived: dto.archived,
-        status: dto.status as ConversationStatus | undefined,
+        status: dto.status,
         rating: dto.rating,
         // resolvedAt anchors resolve-time analytics: first entry into a final
         // state stamps it, reopen clears it.
         ...(dto.status === undefined
           ? {}
-          : isConversationFinal(dto.status as ConversationStatus)
+          : isConversationFinal(dto.status)
             ? { resolvedAt: conversation.resolvedAt ?? new Date() }
             : { resolvedAt: null }),
       },
@@ -632,7 +649,10 @@ export class ConversationsService {
   }
 
   async softDelete(session: SessionData, conversationId: string) {
-    const conversation = await this.getOwnedConversation(session, conversationId);
+    const conversation = await this.getOwnedConversation(
+      session,
+      conversationId,
+    );
 
     const updated = await this.chatPrisma.conversation.update({
       where: { id: conversation.id },

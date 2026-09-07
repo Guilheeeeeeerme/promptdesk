@@ -37,13 +37,11 @@ export function SessionHome() {
           )}
           {session.user.role === 'root' || session.user.role === 'admin' ? (
             <p className="mt-2 text-xs text-gray-500">
-              Use the company switcher in the header to change tenant context.
-              Open Chat to work in Support under the same session.
+              {t('Use the company switcher in the header to change tenant context. Open Chat to work in Support under the same session.')}
             </p>
           ) : (
             <p className="mt-2 text-xs text-gray-500">
-              Your company is fixed for this account. Open Chat to continue in
-              Support.
+              {t('Your company is fixed for this account. Open Chat to continue in Support.')}
             </p>
           )}
         </div>

@@ -27,7 +27,11 @@ import { isPlatformRole, type SessionData } from '../auth/session.types';
   },
 })
 export class ChatGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
+  implements
+    OnGatewayInit,
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleDestroy
 {
   private readonly logger = new Logger(ChatGateway.name);
 
@@ -82,9 +86,7 @@ export class ChatGateway
         .emit('conversation:update', event);
       return;
     }
-    this.server
-      .to(`user:${(event as ChatJobEvent).userId}`)
-      .emit('job:update', event);
+    this.server.to(`user:${event.userId}`).emit('job:update', event);
   }
 
   @SubscribeMessage('guideline:subscribe')

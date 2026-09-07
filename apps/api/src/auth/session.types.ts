@@ -1,4 +1,4 @@
-export type SessionRole = 'root' | 'admin' | 'manager' | 'agent';
+export type SessionRole = 'root' | 'admin' | 'manager' | 'agent' | 'owner';
 
 export interface SessionData {
   userId: string;

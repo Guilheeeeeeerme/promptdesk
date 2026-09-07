@@ -3,10 +3,12 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { isPlatformRole } from './types';
+import { useLocale } from './locale';
 import { FeedbackBanner, type Feedback } from './FeedbackBanner';
 
 export function AddCompanyPage() {
   const { session, refreshCompanies } = useAuth();
+  const { t } = useLocale();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -25,8 +27,8 @@ export function AddCompanyPage() {
       return;
     }
     if (!next.name.toLowerCase().endsWith('.txt')) {
-      setError('Only .txt guideline files are supported');
-      setFeedback({ tone: 'error', message: 'Only .txt guideline files are supported.' });
+      setError(t('Only .txt guideline files are supported'));
+      setFeedback({ tone: 'error', message: t('Only .txt guideline files are supported.') });
       return;
     }
     setError(null);
@@ -43,7 +45,7 @@ export function AddCompanyPage() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    setFeedback({ tone: 'info', message: 'Creating company…' });
+    setFeedback({ tone: 'info', message: t('Creating company…') });
     setSubmitting(true);
     try {
       const body = new FormData();
@@ -58,13 +60,13 @@ export function AddCompanyPage() {
           feedback: {
             tone: 'success' as const,
             message: file
-              ? 'Company created. Its guideline is active and ready to use.'
-              : 'Company created successfully.',
+              ? t('Company created. Its guideline is active and ready to use.')
+              : t('Company created successfully.'),
           },
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create company';
+      const message = err instanceof Error ? err.message : t('Failed to create company');
       setError(message);
       setFeedback({ tone: 'error', message });
     } finally {
@@ -75,9 +77,9 @@ export function AddCompanyPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Add New Company</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t('Add New Company')}</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Add a new company and upload its support guidelines
+          {t('Add a new company and upload its support guidelines')}
         </p>
       </div>
 
@@ -89,7 +91,7 @@ export function AddCompanyPage() {
                 htmlFor="company-name"
                 className="block text-sm font-medium text-gray-700"
               >
-                Company Name
+                {t('Company Name')}
               </label>
               <div className="mt-1">
                 <input
@@ -100,14 +102,14 @@ export function AddCompanyPage() {
                   value={name}
                   onChange={(e) => setName(e.currentTarget.value)}
                   className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md border px-3 py-2"
-                  placeholder="Enter company name"
+                  placeholder={t('Enter company name')}
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Guidelines File
+                {t('Guidelines File')}
               </label>
               <div
                 className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md ${
@@ -132,7 +134,7 @@ export function AddCompanyPage() {
                       htmlFor="file-upload"
                       className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none"
                     >
-                      <span>Upload a file</span>
+                      <span>{t('Upload a file')}</span>
                       <input
                         id="file-upload"
                         name="file-upload"
@@ -144,12 +146,12 @@ export function AddCompanyPage() {
                         }
                       />
                     </label>
-                    <p className="pl-1">or drag and drop</p>
+                    <p className="pl-1">{t('or drag and drop')}</p>
                   </div>
-                  <p className="text-xs text-gray-500">TXT file up to 10MB</p>
+                  <p className="text-xs text-gray-500">{t('TXT file up to 10MB')}</p>
                   {file && (
                     <p className="text-sm text-gray-700 pt-2">
-                      Selected: <span className="font-medium">{file.name}</span>
+                      {t('Selected: {name}').replace('{name}', file.name)}
                     </p>
                   )}
                 </div>
@@ -165,14 +167,14 @@ export function AddCompanyPage() {
                 to="/companies"
                 className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                Cancel
+                {t('Cancel')}
               </Link>
               <button
                 type="submit"
                 disabled={submitting || !name.trim()}
                 className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60"
               >
-                {submitting ? 'Saving…' : 'Add Company'}
+                {submitting ? t('Saving…') : t('Add Company')}
               </button>
             </div>
           </form>

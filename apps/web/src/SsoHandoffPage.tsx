@@ -6,12 +6,15 @@ import {
   isAllowedReturnUrl,
 } from '@shared/auth';
 import { apiFetch, clearToken, getAllowedReturnOrigins, getToken } from './api';
+import { useLocale } from './locale';
 
 /**
  * Silent SSO bridge for MFEs on other origins.
  * Passes the main app's current session token to an allowlisted returnUrl.
  */
 export function SsoHandoffPage() {
+  const { t } = useLocale();
+
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
   const [message, setMessage] = useState('Continuing…');
@@ -46,7 +49,7 @@ export function SsoHandoffPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-      {message}
+      {t(message)}
     </div>
   );
 }

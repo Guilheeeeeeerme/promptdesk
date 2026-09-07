@@ -3,11 +3,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 jest.mock('../auth/session.service', () => ({
   SessionService: class SessionService {},
 }));
+jest.mock('../redis/redis.service', () => ({
+  RedisService: class RedisService {},
+}));
 import { AuthGuard } from '../auth/auth.guard';
 import { SessionService } from '../auth/session.service';
 import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisModule } from '../redis/redis.module';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UsersController } from './users.controller';
 import { UsersModule } from './users.module';
@@ -75,11 +79,11 @@ describe('UsersController', () => {
     await expect(
       pipe.transform(
         {
-        email: 'new@example.com',
-        name: 'New User',
-        role: 'agent',
-        password: 'password123',
-        companyId: 'client-selected-company',
+          email: 'new@example.com',
+          name: 'New User',
+          role: 'agent',
+          password: 'password123',
+          companyId: 'client-selected-company',
         },
         { type: 'body', metatype: CreateUserDto },
       ),
@@ -88,7 +92,7 @@ describe('UsersController', () => {
 
   it('includes UsersModule in the application dependency graph', async () => {
     const moduleFixture = await Test.createTestingModule({
-      imports: [PrismaModule, UsersModule],
+      imports: [PrismaModule, RedisModule, UsersModule],
     }).compile();
 
     expect(moduleFixture.get(UsersController)).toBeInstanceOf(UsersController);

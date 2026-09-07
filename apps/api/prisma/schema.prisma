@@ -18,6 +18,7 @@ enum Role {
   admin
   manager
   agent
+  owner
 }
 
 enum GuidelineValidationStatus {
