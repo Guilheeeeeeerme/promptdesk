@@ -104,7 +104,7 @@ export type ChatGenerateJobData = {
   userId: string;
   /** Owning conversation; legacy jobs (pre-conversations) omit it. */
   conversationId?: string;
-  /** Primary Gemini; failover re-enqueues with openai. */
+  /** Order-resolved primary provider; failover re-enqueues with the next provider in order. */
   provider?: ChatProvider;
   locale?: SupportLocale;
   /** Attempts already spent on prior provider(s) before this job. */

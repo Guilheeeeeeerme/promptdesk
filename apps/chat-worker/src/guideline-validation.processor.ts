@@ -1,4 +1,5 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { ConfigService } from "@nestjs/config";
 import { Job } from "bullmq";
 import { CorePrismaService } from "./core-prisma.service";
 import { GeminiService } from "./gemini.service";
@@ -14,7 +15,10 @@ import {
   executeGuidelineValidation,
   type GuidelineLifecycleStore,
 } from "./guideline-validation.lifecycle";
-import { createGeminiFirstGuidelineProvider } from './provider-policy';
+import {
+  createGeminiFirstGuidelineProvider,
+  resolveProviderOrder,
+} from './provider-policy';
 
 @Processor(GUIDELINE_VALIDATE_QUEUE)
 export class GuidelineValidationProcessor extends WorkerHost {
@@ -24,6 +28,7 @@ export class GuidelineValidationProcessor extends WorkerHost {
     private readonly openai: OpenAiService,
     private readonly modelRank: ModelRankService,
     private readonly events: EventsPublisher,
+    private readonly config: ConfigService,
   ) {
     super();
   }
@@ -33,6 +38,10 @@ export class GuidelineValidationProcessor extends WorkerHost {
       this.modelRank.getGeminiRank(),
       this.modelRank.getOpenAiRank(),
     ]);
+    const providerOrder = resolveProviderOrder(
+      this.config.get<string>('LLM_PROVIDER_ORDER'),
+      { gemini: true, openai: this.openai.isConfigured() },
+    );
     const validator = new GuidelineValidator(
       createGeminiFirstGuidelineProvider(
         this.gemini,
@@ -40,6 +49,7 @@ export class GuidelineValidationProcessor extends WorkerHost {
         this.openai,
         openaiModels,
         this.openai.isConfigured(),
+        providerOrder,
       ),
     );
     await executeGuidelineValidation(

@@ -25,12 +25,14 @@ import {
 import { PrismaService } from './prisma.service';
 import { boundPromptContext } from './prompt-budget';
 import { resolveGuidelineContext } from './guideline-context';
+import { resolveProviderOrder } from './provider-policy';
 
 @Processor(CHAT_GENERATE_QUEUE)
 export class ChatGenerateProcessor extends WorkerHost {
   private readonly logger = new Logger(ChatGenerateProcessor.name);
   private readonly redis: Redis;
   private readonly jobAttempts: number;
+  private readonly providerOrder: ChatProvider[];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -50,6 +52,10 @@ export class ChatGenerateProcessor extends WorkerHost {
       lazyConnect: false,
     });
     this.jobAttempts = Number(this.config.get('CHAT_JOB_ATTEMPTS', 3));
+    this.providerOrder = resolveProviderOrder(
+      this.config.get<string>('LLM_PROVIDER_ORDER'),
+      { gemini: true, openai: this.openai.isConfigured() },
+    );
   }
 
   private async isAborted(assistantMessageId: string): Promise<boolean> {
@@ -78,7 +84,12 @@ export class ChatGenerateProcessor extends WorkerHost {
       conversationId,
       priorAttemptCount = 0,
     } = job.data;
-    const provider: ChatProvider = job.data.provider ?? 'gemini';
+    // Fresh jobs start at the head of the resolved provider order; failover
+    // jobs arrive with attempts already spent and keep their target provider.
+    const provider: ChatProvider =
+      priorAttemptCount > 0
+        ? (job.data.provider ?? this.providerOrder[0] ?? 'gemini')
+        : (this.providerOrder[0] ?? 'gemini');
     const attemptsMade = job.attemptsMade + 1;
     const maxAttempts = job.opts.attempts ?? this.jobAttempts;
     const totalAttempts = priorAttemptCount + attemptsMade;
@@ -295,13 +306,20 @@ export class ChatGenerateProcessor extends WorkerHost {
       }
 
       const isFinal = attemptsMade >= maxAttempts;
-      if (isFinal && provider === 'gemini') {
-        if (this.openai.isConfigured()) {
-          await this.failoverToOpenAi(job.data, totalAttempts, message);
+      if (isFinal) {
+        const nextProvider = this.nextProviderAfter(provider);
+        if (nextProvider) {
+          await this.failoverToProvider(
+            nextProvider,
+            provider,
+            job.data,
+            totalAttempts,
+            message,
+          );
           return;
         }
         this.logger.warn(
-          `Gemini exhausted; OPENAI_API_KEY unset — fail without OpenAI failover`,
+          `Provider ${provider} exhausted; no further configured provider in LLM_PROVIDER_ORDER — failing without failover`,
         );
       }
 
@@ -335,7 +353,7 @@ export class ChatGenerateProcessor extends WorkerHost {
     }
   }
 
-  /** BullMQ attempt N → Redis-ranked model index N-1 (Gemini preferred; OpenAI only on failover jobs). */
+  /** BullMQ attempt N → Redis-ranked model index N-1 for the job's provider (order-resolved; next provider only on failover jobs). */
   private async resolveModel(
     provider: ChatProvider,
     attemptsMade: number,
@@ -352,7 +370,15 @@ export class ChatGenerateProcessor extends WorkerHost {
       : this.gemini.getModelName();
   }
 
-  private async failoverToOpenAi(
+  /** Next provider in LLM_PROVIDER_ORDER after the failed one, if any. */
+  private nextProviderAfter(provider: ChatProvider): ChatProvider | undefined {
+    const idx = this.providerOrder.indexOf(provider);
+    return idx >= 0 ? this.providerOrder[idx + 1] : undefined;
+  }
+
+  private async failoverToProvider(
+    target: ChatProvider,
+    failedProvider: ChatProvider,
     data: ChatGenerateJobData,
     priorAttemptCount: number,
     lastError: string,
@@ -360,19 +386,19 @@ export class ChatGenerateProcessor extends WorkerHost {
     const { assistantMessageId, userMessageId, userId } = data;
 
     if (await this.isAborted(assistantMessageId)) {
-      this.logger.log(`Skip OpenAI failover; aborted ${assistantMessageId}`);
+      this.logger.log(`Skip ${target} failover; aborted ${assistantMessageId}`);
       return;
     }
 
-    if (!this.openai.isConfigured()) {
+    if (!this.providerOrder.includes(target)) {
       this.logger.warn(
-        `Skip OpenAI failover; OPENAI_API_KEY missing for ${assistantMessageId}`,
+        `Skip ${target} failover; provider not configured for ${assistantMessageId}`,
       );
       return;
     }
 
     this.logger.warn(
-      `Gemini exhausted; failover to OpenAI for assistant=${assistantMessageId}`,
+      `${failedProvider} exhausted; failover to ${target} for assistant=${assistantMessageId}`,
     );
 
     const claimed = await this.prisma.chatMessage.updateMany({
@@ -382,15 +408,15 @@ export class ChatGenerateProcessor extends WorkerHost {
       },
       data: {
         status: MessageStatus.pending,
-        lastError: `Gemini failed; failing over to OpenAI: ${lastError}`,
+        lastError: `${failedProvider} failed; failing over to ${target}: ${lastError}`,
         attemptCount: priorAttemptCount,
-        provider: 'openai',
+        provider: target,
       },
     });
 
     if (claimed.count === 0) {
       this.logger.log(
-        `Skip OpenAI failover; message not in-flight ${assistantMessageId}`,
+        `Skip ${target} failover; message not in-flight ${assistantMessageId}`,
       );
       return;
     }
@@ -400,14 +426,14 @@ export class ChatGenerateProcessor extends WorkerHost {
       assistantMessageId,
       userMessageId,
       status: 'pending',
-      provider: 'openai',
+      provider: target,
     });
 
     await this.chatQueue.add(
       'generate',
       {
         ...data,
-        provider: 'openai',
+        provider: target,
         priorAttemptCount,
       },
       {
@@ -415,8 +441,8 @@ export class ChatGenerateProcessor extends WorkerHost {
         backoff: { type: 'exponential', delay: 1000 },
         removeOnComplete: 100,
         removeOnFail: 200,
-        // Distinct from Gemini jobId so BullMQ accepts the failover job.
-        jobId: `chat-gen:${assistantMessageId}:openai`,
+        // Distinct jobId per target provider so BullMQ accepts the failover job.
+        jobId: `chat-gen:${assistantMessageId}:${target}`,
       },
     );
   }
