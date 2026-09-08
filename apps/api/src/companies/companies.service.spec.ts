@@ -15,6 +15,67 @@ describe('CompaniesService safe guideline lifecycle', () => {
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
   };
 
+  it('quarantines create-with-file as pending without activating guidelines', async () => {
+    const tx = {
+      company: {
+        create: jest.fn().mockResolvedValue({ id: 'company-new', name: 'Acme' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'company-new',
+          name: 'Acme',
+          createdAt: new Date('2026-09-08T00:00:00.000Z'),
+          guidelineFileName: null,
+          guidelineUpdatedAt: null,
+          guidelineText: null,
+          currentGuidelineVersion: null,
+        }),
+      },
+      guidelineVersion: {
+        create: jest.fn().mockResolvedValue({ id: 'version-1', version: 1 }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback: (value: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const guidelineQueue = { add: jest.fn().mockResolvedValue(undefined) };
+    const service = new CompaniesService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      guidelineQueue as never,
+    );
+
+    await expect(
+      service.create(session, 'Acme', textFile('untrusted policy')),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'company-new',
+        hasGuidelines: false,
+        currentVersion: null,
+        pendingVersion: 1,
+        validationStatus: 'pending',
+      }),
+    );
+
+    expect(tx.guidelineVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'pending',
+          content: 'untrusted policy',
+        }),
+      }),
+    );
+    expect(tx.company.create).toHaveBeenCalledWith({
+      data: { name: 'Acme' },
+    });
+    expect(guidelineQueue.add).toHaveBeenCalledWith(
+      'validate',
+      { companyId: 'company-new', versionId: 'version-1' },
+      expect.objectContaining({ jobId: 'guideline-validate-version-1' }),
+    );
+  });
+
   it('quarantines an upload as pending without replacing the active version', async () => {
     const tx = {
       guidelineVersion: {

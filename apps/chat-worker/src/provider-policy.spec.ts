@@ -106,6 +106,29 @@ describe('Gemini-first cheapest-model policy', () => {
     expect(calls).toEqual(['gemini:gemini-cheapest']);
   });
 
+  it('halts provider failover when the company LLM budget is exceeded', async () => {
+    const { LlmBudgetExceededError } = await import('./llm-budget');
+    const calls: string[] = [];
+    const selected = createGeminiFirstGuidelineProvider(
+      provider(async (_, model) => {
+        calls.push(`gemini:${model}`);
+        throw new LlmBudgetExceededError('budget_exceeded', 'company-1');
+      }),
+      ['gemini-cheapest', 'gemini-next'],
+      provider(async (_, model) => {
+        calls.push(`openai:${model}`);
+        return { status: 'valid' };
+      }),
+      ['gpt-cheapest'],
+      true,
+    );
+
+    await expect(selected.validateGuideline('policy')).rejects.toBeInstanceOf(
+      LlmBudgetExceededError,
+    );
+    expect(calls).toEqual(['gemini:gemini-cheapest']);
+  });
+
 });
 
 describe('resolveProviderOrder', () => {
