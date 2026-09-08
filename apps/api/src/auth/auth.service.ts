@@ -65,14 +65,21 @@ export class AuthService {
       where: { email: 'demo@acme-demo.local' },
       include: { company: true },
     });
+    if (user && user.role !== Role.manager) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { role: Role.manager },
+        include: { company: true },
+      });
+    }
     if (!user) {
       await this.prisma.user
         .create({
           data: {
             email: 'demo@acme-demo.local',
-            name: 'Demo Agent',
+            name: 'Demo Manager',
             passwordHash: await bcrypt.hash(randomUUID(), 12),
-            role: Role.agent,
+            role: Role.manager,
             companyId: company.id,
           },
         })
@@ -93,6 +100,8 @@ export class AuthService {
     if (!user) {
       throw new Error('demo user unavailable');
     }
+
+    await this.expireDemoGuests(company.id, user.id);
 
     if (!company.guidelineText) {
       const hash = createHash('sha256').update(guideline).digest('hex');
@@ -124,6 +133,46 @@ export class AuthService {
     await this.seedDemoChat(company.id, user.id);
 
     return { user, companyId: company.id };
+  }
+
+  private readonly DEMO_GUEST_TTL_HOURS = 72;
+
+  /**
+   * Demo-company accounts minted by demo visitors carry a lifecycle deadline.
+   * Every demo login renews the deadline and drops whatever expired.
+   */
+  private async expireDemoGuests(companyId: string, demoUserId: string) {
+    const now = new Date();
+    const horizon = new Date(
+      now.getTime() + this.DEMO_GUEST_TTL_HOURS * 3_600_000,
+    );
+    const guests = await this.prisma.user.findMany({
+      where: { companyId, id: { not: demoUserId } },
+      select: { id: true, expiresAt: true },
+    });
+    if (guests.length === 0) {
+      return;
+    }
+    const expired: string[] = [];
+    for (const guest of guests) {
+      if (guest.expiresAt && guest.expiresAt <= now) {
+        expired.push(guest.id);
+      } else if (!guest.expiresAt) {
+        await this.prisma.user.update({
+          where: { id: guest.id },
+          data: { expiresAt: horizon },
+        });
+      }
+    }
+    if (expired.length > 0) {
+      await this.chatPrisma.chatMessage.deleteMany({
+        where: { userId: { in: expired } },
+      });
+      await this.chatPrisma.conversation.deleteMany({
+        where: { userId: { in: expired } },
+      });
+      await this.prisma.user.deleteMany({ where: { id: { in: expired } } });
+    }
   }
 
   private async seedDemoChat(companyId: string, userId: string) {

@@ -75,6 +75,8 @@ model User {
   name         String
   role         Role
   locale       String?
+  /// Optional contract deadline for user provisioning (demo/guest lifecycle cleanup).
+  expiresAt    DateTime?
   companyId    String?
   company      Company? @relation(fields: [companyId], references: [id])
   createdAt    DateTime @default(now())
