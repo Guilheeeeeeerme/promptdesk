@@ -104,8 +104,10 @@ services:
       REDIS_URL: ${REDIS_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-nano}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       CHAT_JOB_ATTEMPTS: ${CHAT_JOB_ATTEMPTS:-3}
       MODEL_RANK_REFRESH_MS: ${MODEL_RANK_REFRESH_MS:-43200000}
       MODEL_RANK_TOP_N: ${MODEL_RANK_TOP_N:-3}
