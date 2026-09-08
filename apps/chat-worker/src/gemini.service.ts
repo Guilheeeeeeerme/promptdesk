@@ -20,6 +20,7 @@ export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private readonly defaultModel: string;
   private readonly client: GoogleGenerativeAI;
+  private readonly requestOptions?: { baseUrl: string };
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>("GEMINI_API_KEY");
@@ -31,6 +32,10 @@ export class GeminiService {
       "gemini-2.5-flash-lite",
     );
     this.client = new GoogleGenerativeAI(apiKey);
+    const baseUrl = this.config.get<string>("GEMINI_BASE_URL")?.trim();
+    this.requestOptions = baseUrl
+      ? { baseUrl: baseUrl.replace(/\/$/, "") }
+      : undefined;
   }
 
   getModelName(override?: string): string {
@@ -41,15 +46,17 @@ export class GeminiService {
     const modelName = this.getModelName(model);
     // Keep system policy in systemInstruction and untrusted guideline text in
     // user content — same role separation as OpenAiService.validateGuideline.
-    const modelClient = this.client.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-        maxOutputTokens: 100,
-        responseMimeType: "application/json",
+    const modelClient = this.client.getGenerativeModel(
+      {
+        model: modelName,
+        generationConfig: {
+          maxOutputTokens: 100,
+          responseMimeType: "application/json",
+        },
+        systemInstruction: renderPrompt('support.guideline.validation.system'),
       },
-      systemInstruction: renderPrompt('support.guideline.validation.system'),
-    });
-    const result = await modelClient.generateContent(
+      this.requestOptions,
+    );    const result = await modelClient.generateContent(
       renderPrompt('support.guideline.validation.user', { guideline: content }),
       { timeout: PROVIDER_TIMEOUT_MS },
     );
@@ -74,12 +81,14 @@ export class GeminiService {
       mode: params.mode,
       locale: params.locale,
     });
-    const model = this.client.getGenerativeModel({
-      model: modelName,
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
-      systemInstruction: prompt.systemInstruction,
-    });
-
+    const model = this.client.getGenerativeModel(
+      {
+        model: modelName,
+        generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+        systemInstruction: prompt.systemInstruction,
+      },
+      this.requestOptions,
+    );
     const result = await model.generateContent(prompt.context, {
       timeout: PROVIDER_TIMEOUT_MS,
     });

@@ -63,7 +63,8 @@ export class OpenAiService {
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is required for OpenAI failover");
     }
-    this.client = new OpenAI({ apiKey });
+    const baseURL = this.config.get<string>("OPENAI_BASE_URL")?.trim() || undefined;
+    this.client = new OpenAI({ apiKey, baseURL });
     return this.client;
   }
 

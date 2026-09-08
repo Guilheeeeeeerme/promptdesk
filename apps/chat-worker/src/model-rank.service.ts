@@ -266,7 +266,11 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) return [];
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+      const base = (
+        this.config.get<string>('GEMINI_BASE_URL')?.trim() ||
+        'https://generativelanguage.googleapis.com'
+      ).replace(/\/$/, '');
+      const url = `${base}/v1beta/models?key=${encodeURIComponent(apiKey)}`;
       const res = await fetch(url, {
         signal: AbortSignal.timeout(12_000),
       });
@@ -295,7 +299,11 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
     const apiKey = this.config.get<string>('OPENAI_API_KEY');
     if (!apiKey) return [];
     try {
-      const res = await fetch('https://api.openai.com/v1/models', {
+      const base = (
+        this.config.get<string>('OPENAI_BASE_URL')?.trim() ||
+        'https://api.openai.com/v1'
+      ).replace(/\/$/, '');
+      const res = await fetch(`${base}/models`, {
         headers: { Authorization: `Bearer ${apiKey}` },
         signal: AbortSignal.timeout(12_000),
       });
