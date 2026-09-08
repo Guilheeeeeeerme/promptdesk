@@ -9,8 +9,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { GuidelineValidationStatus, Role } from '@prisma/client';
+import { randomUUID, createHash } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatPrismaService } from '../prisma/chat-prisma.service';
 import { RedisService } from '../redis/redis.service';
 import {
   parseSupportedLocale,
@@ -26,9 +29,135 @@ const AUTH_RATE_LIMIT_WINDOW_SECONDS = 300;
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly chatPrisma: ChatPrismaService,
     private readonly sessions: SessionService,
     private readonly redis: RedisService,
   ) {}
+
+  async demo(ip: string) {
+    await this.enforceAuthRateLimit('demo', ip);
+    const { user, companyId } = await this.ensureDemoWorld();
+    const { token, session } = await this.sessions.create({
+      userId: user.id,
+      role: user.role,
+      activeCompanyId: companyId,
+    });
+    return this.buildAuthResponse(token, session);
+  }
+
+  private async ensureDemoWorld() {
+    const guideline = [
+      'Acme Demo Co — Support Guidelines',
+      '',
+      '- Refunds: available within 14 days of purchase; resolve instantly via dashboard.',
+      '- Shipping: orders ship in 1-2 business days; free over $50.',
+      '- Account issues: escalate to the platform team (in the demo, explain this is AI-answered).',
+      '- Always stay friendly, concise, and respond in English.',
+    ].join('\n');
+
+    const company = await this.prisma.company.upsert({
+      where: { name: 'Acme Demo Co' },
+      update: {},
+      create: { name: 'Acme Demo Co' },
+    });
+
+    let user = await this.prisma.user.findUnique({
+      where: { email: 'demo@acme-demo.local' },
+      include: { company: true },
+    });
+    if (!user) {
+      await this.prisma.user
+        .create({
+          data: {
+            email: 'demo@acme-demo.local',
+            name: 'Demo Agent',
+            passwordHash: await bcrypt.hash(randomUUID(), 12),
+            role: Role.agent,
+            companyId: company.id,
+          },
+        })
+        .catch((error) => {
+          if (
+            !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+            error.code !== 'P2002'
+          ) {
+            throw error;
+          }
+          return null;
+        });
+      user = await this.prisma.user.findUnique({
+        where: { email: 'demo@acme-demo.local' },
+        include: { company: true },
+      });
+    }
+    if (!user) {
+      throw new Error('demo user unavailable');
+    }
+
+    if (!company.guidelineText) {
+      const hash = createHash('sha256').update(guideline).digest('hex');
+      await this.prisma.$transaction(async (tx) => {
+        const created = await tx.guidelineVersion.create({
+          data: {
+            companyId: company.id,
+            version: 1,
+            content: guideline,
+            fileName: 'demo-guideline.md',
+            contentHash: hash,
+            byteSize: Buffer.byteLength(guideline),
+            status: GuidelineValidationStatus.valid,
+            validatedAt: new Date(),
+          },
+        });
+        await tx.company.update({
+          where: { id: company.id },
+          data: {
+            guidelineText: guideline,
+            guidelineFileName: 'demo-guideline.md',
+            guidelineUpdatedAt: new Date(),
+            currentGuidelineVersionId: created.id,
+          },
+        });
+      });
+    }
+
+    await this.seedDemoChat(company.id, user.id);
+
+    return { user, companyId: company.id };
+  }
+
+  private async seedDemoChat(companyId: string, userId: string) {
+    const existing = await this.chatPrisma.conversation.findFirst({
+      where: { companyId, userId },
+      select: { id: true },
+    });
+    if (existing) {
+      return;
+    }
+    const conversation = await this.chatPrisma.conversation.create({
+      data: { companyId, userId, title: 'AI Support tour' },
+    });
+    await this.chatPrisma.chatMessage.createMany({
+      data: [
+        {
+          companyId,
+          userId,
+          conversationId: conversation.id,
+          role: 'user',
+          content:
+            'What is your refund policy and how fast do refunds get processed?',
+        },
+        {
+          companyId,
+          userId,
+          conversationId: conversation.id,
+          role: 'assistant',
+          content:
+            "Welcome! I answer questions grounded in Acme Demo Co's support guidelines stored in this workspace. The message above is a sample question — open a new thread and ask anything to see a grounded AI answer.",
+        },
+      ],
+    });
+  }
 
   async login(email: string, password: string, ip: string) {
     await this.enforceAuthRateLimit('login', ip);
@@ -182,7 +311,7 @@ export class AuthService {
    * INCR a bucket counter (TTL-scoped) and reject with 429 past the cap.
    */
   private async enforceAuthRateLimit(
-    kind: 'login' | 'register',
+    kind: 'login' | 'register' | 'demo',
     ip: string,
   ): Promise<void> {
     const bucket = Math.floor(

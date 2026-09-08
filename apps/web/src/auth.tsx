@@ -16,6 +16,7 @@ interface AuthContextValue {
   companies: Company[];
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginDemo: () => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   refreshCompanies: () => Promise<void>;
@@ -74,6 +75,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadCompanies],
   );
 
+  const loginDemo = useCallback(async () => {
+    const data = await apiFetch<LoginResponse>('/auth/demo', {
+      method: 'POST',
+    });
+    setToken(data.token);
+    setSession({ user: data.user, activeCompany: data.activeCompany });
+    await loadCompanies();
+  }, [loadCompanies]);
+
   const logout = useCallback(async () => {
     try {
       if (getToken()) {
@@ -105,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       companies,
       loading,
       login,
+      loginDemo,
       logout,
       refreshSession,
       refreshCompanies: loadCompanies,
@@ -118,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       companies,
       loading,
       login,
+      loginDemo,
       logout,
       refreshSession,
       loadCompanies,

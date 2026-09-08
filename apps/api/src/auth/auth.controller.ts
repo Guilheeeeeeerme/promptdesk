@@ -39,6 +39,11 @@ export class AuthController {
     );
   }
 
+  @Post('demo')
+  demo(@Req() req: Request) {
+    return this.authService.demo(req.ip ?? 'unknown');
+  }
+
   @Post('logout')
   @UseGuards(AuthGuard)
   logout(@Req() req: AuthenticatedRequest) {

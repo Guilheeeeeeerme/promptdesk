@@ -44,6 +44,15 @@ describe('AuthService.register', () => {
     },
     $transaction: jest.fn(),
   };
+  const chatPrisma = {
+    conversation: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'conversation-1' }),
+      create: jest.fn(),
+    },
+    chatMessage: {
+      createMany: jest.fn().mockResolvedValue({ count: 2 }),
+    },
+  };
   const sessions = { create: jest.fn() };
   const incr = jest.fn();
   const expire = jest.fn();
@@ -75,6 +84,7 @@ describe('AuthService.register', () => {
     );
     service = new AuthService(
       prisma as never,
+      chatPrisma as never,
       sessions as never,
       redis as never,
     );

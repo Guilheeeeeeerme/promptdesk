@@ -11,7 +11,7 @@ import { useAuth } from './auth';
 import { useLocale } from './locale';
 
 export function LoginPage() {
-  const { session, loading, login } = useAuth();
+  const { session, loading, login, loginDemo } = useAuth();
   const { t } = useLocale();
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
@@ -37,6 +37,29 @@ export function LoginPage() {
       );
     }
     return <Navigate to="/" replace />;
+  }
+
+  async function onDemo() {
+    setError(null);
+
+    if (returnUrl && !validReturnUrl) {
+      setError(t('Invalid return URL'));
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await loginDemo();
+      const token = getToken();
+      if (validReturnUrl && token) {
+        window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
+        return;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('Demo sign-in failed'));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -113,6 +136,25 @@ export function LoginPage() {
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting ? t('Signing in…') : t('Sign in')}
             </Button>
+
+            <div className="flex items-center gap-3" role="separator" aria-label={t('Or try the demo')}>
+              <span className="h-px flex-1 border-t border-line-subtle" />
+              <span className="text-12 text-ink-tertiary">{t('or')}</span>
+              <span className="h-px flex-1 border-t border-line-subtle" />
+            </div>
+
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={submitting}
+              className="w-full"
+              onClick={onDemo}
+            >
+              {t('Explore as a demo user')}
+            </Button>
+            <p className="text-center text-12 text-ink-tertiary">
+              {t('Instant access to a sample workspace with an AI support assistant — no signup needed.')}
+            </p>
 
             <p className="text-center text-14 text-ink-secondary">
               {t('Need a company account?')}{' '}
