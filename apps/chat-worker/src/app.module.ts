@@ -11,6 +11,7 @@ import { CorePrismaService } from "./core-prisma.service";
 import { EventsPublisher } from "./events.publisher";
 import { GeminiService } from "./gemini.service";
 import { HealthController } from "./health.controller";
+import { LlmBudgetService } from "./llm-budget";
 import { ModelRankService } from "./model-rank.service";
 import { OpenAiService } from "./openai.service";
 import { PrismaService } from "./prisma.service";
@@ -40,6 +41,7 @@ import { PrismaService } from "./prisma.service";
     GeminiService,
     OpenAiService,
     ModelRankService,
+    LlmBudgetService,
     EventsPublisher,
     ChatGenerateProcessor,
     GuidelineValidationProcessor,

@@ -21,6 +21,36 @@ import {
 
 type RankedModel = { id: string; inputUsd: number };
 
+/** Production Gemini ids must look like gemini-<digit>... (LLM04 supply-chain). */
+export function isAllowlistedGeminiId(id: string): boolean {
+  return (
+    /^gemini-\d/.test(id) &&
+    !/embed|image|tts|aqa|computer|veo|imagen/i.test(id)
+  );
+}
+
+/** Production OpenAI ids must use the gpt- prefix (no o1/embeddings/tools). */
+export function isAllowlistedOpenAiId(id: string): boolean {
+  return (
+    /^gpt-/i.test(id) &&
+    !/instruct|realtime|audio|search|transcribe|tts|image|moderation|embed/i.test(
+      id,
+    )
+  );
+}
+
+/** Keep only allowlisted scraped prices; never promote unknown scraped ids. */
+export function filterAllowlistedPrices(
+  prices: Record<string, number>,
+  allow: (id: string) => boolean,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, usd] of Object.entries(prices)) {
+    if (allow(id) && Number.isFinite(usd)) out[id] = usd;
+  }
+  return out;
+}
+
 @Injectable()
 export class ModelRankService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ModelRankService.name);
@@ -69,11 +99,19 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getGeminiRank(): Promise<string[]> {
-    return this.readRank(MODEL_RANK_GEMINI_KEY, [...DEFAULT_GEMINI_RANK]);
+    return this.readRank(
+      MODEL_RANK_GEMINI_KEY,
+      [...DEFAULT_GEMINI_RANK],
+      isAllowlistedGeminiId,
+    );
   }
 
   async getOpenAiRank(): Promise<string[]> {
-    return this.readRank(MODEL_RANK_OPENAI_KEY, [...DEFAULT_OPENAI_RANK]);
+    return this.readRank(
+      MODEL_RANK_OPENAI_KEY,
+      [...DEFAULT_OPENAI_RANK],
+      isAllowlistedOpenAiId,
+    );
   }
 
   async refresh(): Promise<void> {
@@ -97,37 +135,50 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
         );
       }
 
-      const corpus = `${pageText}\n${searchText}`;
-      const geminiParsed = this.parseGeminiPrices(corpus);
-      const openaiParsed = this.parseOpenAiPrices(corpus);
+      const corpus = `${pageText}\n${searchText}`.trim();
+      const scrapeFailed = corpus.length === 0;
+      if (scrapeFailed) {
+        this.logger.warn(
+          'Pricing scrape failed — ranking from static seed prices only',
+        );
+      }
+
+      // Scraped ids never enter the rank unless allowlisted; seed prices always
+      // available so a scrape miss still produces a cheapest-first list.
+      const geminiParsed = scrapeFailed
+        ? {}
+        : filterAllowlistedPrices(
+            this.parseGeminiPrices(corpus),
+            isAllowlistedGeminiId,
+          );
+      const openaiParsed = scrapeFailed
+        ? {}
+        : filterAllowlistedPrices(
+            this.parseOpenAiPrices(corpus),
+            isAllowlistedOpenAiId,
+          );
 
       const gemini = this.pickCheapest(
         this.mergeCandidates(
-          geminiListed,
+          geminiListed.filter(isAllowlistedGeminiId),
           Object.keys(SEED_GEMINI_INPUT_USD),
           Object.keys(geminiParsed),
           [...DEFAULT_GEMINI_RANK],
         ),
         { ...SEED_GEMINI_INPUT_USD, ...geminiParsed },
-        (id) =>
-          /^gemini-\d/.test(id) &&
-          !/embed|image|tts|aqa|computer/i.test(id),
+        isAllowlistedGeminiId,
         [...DEFAULT_GEMINI_RANK],
       );
 
       const openai = this.pickCheapest(
         this.mergeCandidates(
-          openaiListed,
+          openaiListed.filter(isAllowlistedOpenAiId),
           Object.keys(SEED_OPENAI_INPUT_USD),
           Object.keys(openaiParsed),
           [...DEFAULT_OPENAI_RANK],
         ),
         { ...SEED_OPENAI_INPUT_USD, ...openaiParsed },
-        (id) =>
-          /^gpt-/i.test(id) &&
-          !/instruct|realtime|audio|search|transcribe|tts|image|moderation/i.test(
-            id,
-          ),
+        isAllowlistedOpenAiId,
         [...DEFAULT_OPENAI_RANK],
       );
 
@@ -148,6 +199,7 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
   private async readRank(
     key: string,
     fallback: string[],
+    allow: (id: string) => boolean,
   ): Promise<string[]> {
     try {
       const raw = await this.redis.get(key);
@@ -158,7 +210,8 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
           parsed.every((x) => typeof x === 'string') &&
           parsed.length > 0
         ) {
-          return parsed.slice(0, this.topN);
+          const filtered = parsed.filter(allow).slice(0, this.topN);
+          if (filtered.length > 0) return filtered;
         }
       }
     } catch (err) {
@@ -166,7 +219,7 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
         `Failed reading ${key}: ${err instanceof Error ? err.message : err}`,
       );
     }
-    return fallback.slice(0, this.topN);
+    return fallback.filter(allow).slice(0, this.topN);
   }
 
   private mergeCandidates(...groups: string[][]): string[] {
@@ -202,7 +255,7 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
     if (picked.length >= this.topN) return picked;
 
     for (const id of defaults) {
-      if (picked.includes(id)) continue;
+      if (!allow(id) || picked.includes(id)) continue;
       picked.push(id);
       if (picked.length >= this.topN) break;
     }
@@ -229,10 +282,7 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
           (m.supportedGenerationMethods ?? []).includes('generateContent'),
         )
         .map((m) => (m.name ?? '').replace(/^models\//, ''))
-        // The Gemini API also exposes non-generative service identifiers;
-        // only model IDs can be passed to generateContent.
-        .filter((id) => /^gemini-\d/.test(id))
-        .filter(Boolean);
+        .filter(isAllowlistedGeminiId);
     } catch (err) {
       this.logger.warn(
         `Gemini models.list failed: ${err instanceof Error ? err.message : err}`,
@@ -258,7 +308,7 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
       };
       return (body.data ?? [])
         .map((m) => m.id ?? '')
-        .filter(Boolean);
+        .filter(isAllowlistedOpenAiId);
     } catch (err) {
       this.logger.warn(
         `OpenAI models.list failed: ${err instanceof Error ? err.message : err}`,

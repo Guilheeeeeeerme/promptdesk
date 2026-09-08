@@ -26,6 +26,7 @@ import { PrismaService } from './prisma.service';
 import { boundPromptContext } from './prompt-budget';
 import { resolveGuidelineContext } from './guideline-context';
 import { resolveProviderOrder } from './provider-policy';
+import { LlmBudgetExceededError, LlmBudgetService } from './llm-budget';
 
 @Processor(CHAT_GENERATE_QUEUE)
 export class ChatGenerateProcessor extends WorkerHost {
@@ -42,6 +43,7 @@ export class ChatGenerateProcessor extends WorkerHost {
     private readonly modelRank: ModelRankService,
     private readonly events: EventsPublisher,
     private readonly config: ConfigService,
+    private readonly llmBudget: LlmBudgetService,
     @InjectQueue(CHAT_GENERATE_QUEUE)
     private readonly chatQueue: Queue<ChatGenerateJobData>,
   ) {
@@ -219,6 +221,9 @@ export class ChatGenerateProcessor extends WorkerHost {
         `Generating provider=${provider} model=${model} attempt=${attemptsMade}/${maxAttempts}`,
       );
 
+      // Fail closed before any provider call (LLM06 worker budgets).
+      await this.llmBudget.assertAllowed(companyId);
+
       const bounded = boundPromptContext({
         guidelines,
         history: chronological.map((m) => ({
@@ -290,6 +295,35 @@ export class ChatGenerateProcessor extends WorkerHost {
     } catch (err) {
       if (err instanceof ChatAbortedError) {
         this.logger.log(`Generation aborted for ${assistantMessageId}`);
+        return;
+      }
+
+      if (err instanceof LlmBudgetExceededError) {
+        this.logger.warn(
+          `LLM budget halt for ${assistantMessageId}: ${err.reason} company=${err.companyId}`,
+        );
+        const failed = await this.prisma.chatMessage.updateMany({
+          where: {
+            id: assistantMessageId,
+            status: { in: [MessageStatus.pending, MessageStatus.processing] },
+          },
+          data: {
+            status: MessageStatus.failed,
+            lastError: err.message,
+            attemptCount: totalAttempts,
+            provider,
+          },
+        });
+        if (failed.count > 0) {
+          await this.events.publish({
+            userId,
+            assistantMessageId,
+            userMessageId,
+            status: 'failed',
+            error: err.message,
+            provider,
+          });
+        }
         return;
       }
 

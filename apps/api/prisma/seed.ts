@@ -13,8 +13,10 @@ function readGuideline(fileName: string): string {
   return fs.readFileSync(filePath, 'utf8');
 }
 
-// Creates version 1 for a company that has no guideline versions yet and
-// points the company at it. Idempotent: existing version history is kept.
+// Trusted seed fixture only: repo-controlled guidelines under seed-guidelines/
+// are pre-reviewed and may be marked valid without the async LLM validator.
+// Runtime create/upload paths must quarantine as pending and activate only
+// after guideline-validation.lifecycle succeeds — never copy this shortcut.
 async function ensureInitialGuidelineVersion(
   companyId: string,
   content: string,
@@ -35,6 +37,7 @@ async function ensureInitialGuidelineVersion(
       fileName,
       contentHash: createHash('sha256').update(buffer).digest('hex'),
       byteSize: buffer.byteLength,
+      // Trusted fixture (see comment above) — not a runtime create bypass.
       status: 'valid',
       validatedAt: new Date(),
     },

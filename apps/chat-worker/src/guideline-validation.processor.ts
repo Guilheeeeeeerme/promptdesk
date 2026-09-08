@@ -18,7 +18,9 @@ import {
 import {
   createGeminiFirstGuidelineProvider,
   resolveProviderOrder,
+  type GuidelineModelProvider,
 } from './provider-policy';
+import { LlmBudgetService } from './llm-budget';
 
 @Processor(GUIDELINE_VALIDATE_QUEUE)
 export class GuidelineValidationProcessor extends WorkerHost {
@@ -29,11 +31,13 @@ export class GuidelineValidationProcessor extends WorkerHost {
     private readonly modelRank: ModelRankService,
     private readonly events: EventsPublisher,
     private readonly config: ConfigService,
+    private readonly llmBudget: LlmBudgetService,
   ) {
     super();
   }
 
   async process(job: Job<GuidelineValidateJobData>): Promise<void> {
+    const companyId = job.data.companyId;
     const [geminiModels, openaiModels] = await Promise.all([
       this.modelRank.getGeminiRank(),
       this.modelRank.getOpenAiRank(),
@@ -42,11 +46,22 @@ export class GuidelineValidationProcessor extends WorkerHost {
       this.config.get<string>('LLM_PROVIDER_ORDER'),
       { gemini: true, openai: this.openai.isConfigured() },
     );
+
+    const withBudget = (
+      service: GuidelineModelProvider,
+    ): GuidelineModelProvider => ({
+      validateGuideline: async (content, model) => {
+        // Fail closed before every provider invoke (LLM06 worker budgets).
+        await this.llmBudget.assertAllowed(companyId);
+        return service.validateGuideline(content, model);
+      },
+    });
+
     const validator = new GuidelineValidator(
       createGeminiFirstGuidelineProvider(
-        this.gemini,
+        withBudget(this.gemini),
         geminiModels,
-        this.openai,
+        withBudget(this.openai),
         openaiModels,
         this.openai.isConfigured(),
         providerOrder,

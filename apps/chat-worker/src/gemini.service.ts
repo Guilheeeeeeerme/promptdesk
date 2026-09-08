@@ -39,15 +39,18 @@ export class GeminiService {
 
   async validateGuideline(content: string, model?: string): Promise<unknown> {
     const modelName = this.getModelName(model);
+    // Keep system policy in systemInstruction and untrusted guideline text in
+    // user content — same role separation as OpenAiService.validateGuideline.
     const modelClient = this.client.getGenerativeModel({
       model: modelName,
       generationConfig: {
         maxOutputTokens: 100,
         responseMimeType: "application/json",
       },
+      systemInstruction: renderPrompt('support.guideline.validation.system'),
     });
     const result = await modelClient.generateContent(
-      `${renderPrompt('support.guideline.validation.system')}\n\n${renderPrompt('support.guideline.validation.user', { guideline: content })}`,
+      renderPrompt('support.guideline.validation.user', { guideline: content }),
       { timeout: PROVIDER_TIMEOUT_MS },
     );
     return JSON.parse(result.response.text());

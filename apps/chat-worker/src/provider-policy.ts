@@ -1,4 +1,5 @@
 import type { ChatProvider } from './chat.constants';
+import { LlmBudgetExceededError } from './llm-budget';
 
 export type GuidelineModelProvider = {
   validateGuideline(content: string, model?: string): Promise<unknown>;
@@ -72,6 +73,8 @@ export function createGeminiFirstGuidelineProvider(
           try {
             return await services[provider].validateGuideline(content, model);
           } catch (error) {
+            // Budget halt is global for the company — do not burn further models.
+            if (error instanceof LlmBudgetExceededError) throw error;
             failures.push(`${labels[provider]} ${model}: ${errorMessage(error)}`);
           }
         }

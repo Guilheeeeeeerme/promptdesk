@@ -103,17 +103,21 @@ reference promptdesk; each project maps them to its equivalent locations.
 
 See `.env.example` for the full annotated set.
 
-## 7. OWASP LLM Top-10 mapping
+## 7. OWASP LLM Top-10 mapping (2026)
 
-| Risk | Enforcement point |
+| Risk (2026) | Enforcement point |
 | --- | --- |
-| LLM01 Prompt Injection | Untrusted data only in the fenced context block (`src/chat.constants.ts` `buildSupportPrompt`); system instruction code-controlled; contract asserted in `src/prompt-contract.spec.ts` |
-| LLM02 Sensitive Information Disclosure | Prompts give policy, not secrets; no content in logs (`guideline-validator.ts`, processors log ids/statuses only) |
-| LLM03 Supply Chain | Policy file versioned + strictly validated (`apps/chat-worker/prompts/registry.yml`, `src/prompt-registry.ts`); pinned provider SDKs |
-| LLM04 Data and Model Poisoning | Deterministic pre-LLM malicious-policy screening (`src/guideline-validator.ts`) before validation reaches a model |
-| LLM05 Improper Output Handling | Strict contract parsing; unknown verdict = error, fail closed (`src/guideline-validator.ts`) |
-| LLM06 Excessive Agency | LLM is text-only; no tool calls; job ownership checked before generation (`src/chat.processor.ts`) |
-| LLM07 System Prompt Leakage | System instruction assembled only in code from the registry, never returns user content (`support.copilot.system`) |
-| LLM08 Vector and Embedding Weaknesses | Not applicable (no vector store in the reference) |
-| LLM09 Misinformation | Guideline versions validated end-to-end with status events; invalid/malicious never activated (`guideline-validation.lifecycle.ts`) |
-| LLM10 Unbounded Consumption | Redis fixed-window rate limits + upload caps; cheapest-model rank (`MODEL_RANK_TOP_N=3`); prompt budget caps (`src/prompt-budget.ts`); bounded job attempts |
+| LLM01 Prompt Injection | Fenced untrusted context (`buildSupportPrompt`); guideline create/upload quarantine + validator; Gemini validation uses separated systemInstruction |
+| LLM02 Sensitive Information Disclosure | No secrets in prompts; no content logs; **Redis `chat:events` carries reply text** — treat Redis as sensitive; Socket.IO room auth is the client control |
+| LLM03 Excessive Agency | Text-only LLM; no tools; job ownership checked before generation |
+| LLM04 Supply Chain | Versioned registry; allowlisted model IDs in rank (no scrape-promoted unknowns) |
+| LLM05 Data and Model Poisoning | Deterministic pre-LLM guideline screening; create-path no longer activates unvalidated guidelines |
+| LLM06 Unbounded Consumption | HTTP send/upload caps + worker Redis `LLM_RATE_LIMIT_PER_MINUTE` / `LLM_DAILY_BUDGET` fail-closed before provider calls |
+| LLM07 Misinformation | Prompt policy only; guidelines sticky-snapshotted per conversation |
+| LLM08 Hidden Context Exposure | System instruction from registry only; assume discoverable |
+| LLM09 Vector and Embedding Weaknesses | N/A (no vector store) |
+| LLM10 Improper Output Handling | Plain-text React sinks; strict guideline verdict parsing |
+
+### Redis chat-event threat (LLM02)
+
+`EventsPublisher` publishes assistant `content` on Redis pub/sub for Socket.IO fan-out. Compromise of Redis or mis-scoped room subscription can expose conversation text. Mitigations: encrypt Redis in transit, restrict network ACL, and keep Socket.IO rooms bound to authenticated user/company (see gateway tests).

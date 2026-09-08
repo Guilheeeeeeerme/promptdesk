@@ -229,53 +229,51 @@ export class CompaniesService {
     const guideline = file ? this.parseGuidelineFile(file) : null;
 
     try {
-      const company = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.company.create({
-          data: {
-            name: trimmed,
-            ...(guideline
-              ? {
-                  guidelineText: guideline.text,
-                  guidelineFileName: guideline.fileName,
-                  guidelineUpdatedAt: new Date(),
-                }
-              : {}),
-          },
-        });
+      // Guidelines attached at create are quarantined as pending — never
+      // activate company.guidelineText / currentGuidelineVersionId until the
+      // worker validator marks a version valid (same lifecycle as upload).
+      const { company, pendingVersionId, pendingVersion } =
+        await this.prisma.$transaction(async (tx) => {
+          const created = await tx.company.create({
+            data: { name: trimmed },
+          });
 
-        if (guideline) {
-          const version = await tx.guidelineVersion.create({
-            data: {
-              companyId: created.id,
-              version: 1,
-              content: guideline.text,
-              fileName: guideline.fileName,
-              ...hashGuidelineContent(guideline.text),
-              createdById: session.userId,
-              status: 'valid',
-              validatedAt: new Date(),
+          let pendingVersionId: string | null = null;
+          let pendingVersion: number | null = null;
+          if (guideline) {
+            const version = await tx.guidelineVersion.create({
+              data: {
+                companyId: created.id,
+                version: 1,
+                content: guideline.text,
+                fileName: guideline.fileName,
+                ...hashGuidelineContent(guideline.text),
+                createdById: session.userId,
+                status: 'pending',
+              },
+            });
+            pendingVersionId = version.id;
+            pendingVersion = version.version;
+          }
+
+          const company = await tx.company.findUniqueOrThrow({
+            where: { id: created.id },
+            select: {
+              id: true,
+              name: true,
+              createdAt: true,
+              guidelineFileName: true,
+              guidelineUpdatedAt: true,
+              guidelineText: true,
+              currentGuidelineVersion: { select: { version: true } },
             },
           });
-
-          await tx.company.update({
-            where: { id: created.id },
-            data: { currentGuidelineVersionId: version.id },
-          });
-        }
-
-        return tx.company.findUniqueOrThrow({
-          where: { id: created.id },
-          select: {
-            id: true,
-            name: true,
-            createdAt: true,
-            guidelineFileName: true,
-            guidelineUpdatedAt: true,
-            guidelineText: true,
-            currentGuidelineVersion: { select: { version: true } },
-          },
+          return { company, pendingVersionId, pendingVersion };
         });
-      });
+
+      if (pendingVersionId) {
+        await this.enqueueValidation(company.id, pendingVersionId);
+      }
 
       return {
         id: company.id,
@@ -286,6 +284,12 @@ export class CompaniesService {
         currentVersion: company.currentGuidelineVersion?.version ?? null,
         hasGuidelines: Boolean(company.guidelineText),
         messageCount: 0,
+        ...(pendingVersion != null
+          ? {
+              pendingVersion,
+              validationStatus: 'pending' as const,
+            }
+          : {}),
       };
     } catch (error: unknown) {
       if (
