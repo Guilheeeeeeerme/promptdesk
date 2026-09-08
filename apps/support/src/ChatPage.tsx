@@ -223,6 +223,7 @@ export function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const userMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
@@ -445,8 +446,19 @@ export function ChatPage() {
       }
     }
 
+    function onPointer(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (userMenuRef.current?.contains(target)) return;
+      setUserMenuOpen(false);
+    }
+
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onPointer);
+    };
   }, [userMenuOpen]);
 
   const patchConversation = useCallback(
@@ -687,7 +699,7 @@ export function ChatPage() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-surface-base">
       <header className="sticky top-0 z-40 border-b border-line bg-surface-base supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex h-[52px] max-w-content items-center justify-between gap-3 px-4 sm:px-5">
+        <div className="mx-auto flex h-[var(--header-height)] max-w-content items-center justify-between gap-3 px-4 sm:px-5 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <p className="hidden text-12 font-medium uppercase tracking-wide text-ink-tertiary sm:block">
               PromptDesk
@@ -704,7 +716,7 @@ export function ChatPage() {
               labelDark={t('Dark mode')}
               labelLight={t('Light mode')}
             />
-            <div className="relative">
+            <div className="relative" ref={userMenuRef}>
               <Button
                 ref={userMenuButtonRef}
                 variant="ghost"
@@ -721,35 +733,40 @@ export function ChatPage() {
                 <div
                   id="support-account-menu"
                   role="menu"
-                  className="absolute end-0 mt-1.25 w-52 rounded-md border border-line bg-surface-overlay py-1 shadow-overlay"
+                  className="absolute end-0 mt-1.25 w-56 rounded-md border border-line bg-surface-overlay py-1 shadow-overlay"
                 >
                   <div className="border-b border-line-subtle px-3 py-2 text-12 text-ink-tertiary">
                     {session.user.email}
                   </div>
-                  <label
-                    className="block px-3 pt-2 text-12 text-ink-tertiary"
-                    htmlFor="support-language-select"
-                  >
-                    {t('Language')}
-                  </label>
-                  <Select
-                    id="support-language-select"
-                    value={locale}
-                    onChange={(e) =>
-                      void setLocale(e.target.value as typeof locale)
-                    }
-                    className="mx-3 my-1 w-[calc(100%-1.5rem)] py-1 text-13"
-                  >
-                    {SUPPORTED_LOCALES.map((supported) => (
-                      <option key={supported} value={supported}>
-                        {LOCALE_LABELS[supported]}
-                      </option>
-                    ))}
-                  </Select>
+                  <div className="border-b border-line-subtle px-3 py-2">
+                    <label
+                      className="mb-1.25 block text-12 font-medium text-ink-tertiary"
+                      htmlFor="support-language-select"
+                    >
+                      {t('Language')}
+                    </label>
+                    <Select
+                      id="support-language-select"
+                      value={locale}
+                      onChange={(e) =>
+                        void setLocale(e.target.value as typeof locale)
+                      }
+                      className="py-1.5 text-13"
+                    >
+                      {SUPPORTED_LOCALES.map((supported) => (
+                        <option key={supported} value={supported}>
+                          {LOCALE_LABELS[supported]}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() => void logout()}
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      void logout();
+                    }}
                     className="block w-full px-3 py-2 text-start text-14 text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
                   >
                     {t('Log out')}
