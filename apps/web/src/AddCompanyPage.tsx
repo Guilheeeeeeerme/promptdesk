@@ -1,5 +1,14 @@
 import { useState, type FormEvent, type DragEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import {
+  Button,
+  FileIcon,
+  Input,
+  Label,
+  PageHeader,
+  Panel,
+  cn,
+} from '@shared/ui';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { isPlatformRole } from './types';
@@ -28,7 +37,10 @@ export function AddCompanyPage() {
     }
     if (!next.name.toLowerCase().endsWith('.txt')) {
       setError(t('Only .txt guideline files are supported'));
-      setFeedback({ tone: 'error', message: t('Only .txt guideline files are supported.') });
+      setFeedback({
+        tone: 'error',
+        message: t('Only .txt guideline files are supported.'),
+      });
       return;
     }
     setError(null);
@@ -66,7 +78,8 @@ export function AddCompanyPage() {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('Failed to create company');
+      const message =
+        err instanceof Error ? err.message : t('Failed to create company');
       setError(message);
       setFeedback({ tone: 'error', message });
     } finally {
@@ -76,110 +89,96 @@ export function AddCompanyPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">{t('Add New Company')}</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          {t('Add a new company and upload its support guidelines')}
-        </p>
-      </div>
+      <PageHeader
+        title={t('Add New Company')}
+        description={t('Add a new company and upload its support guidelines')}
+      />
 
-      <div className="bg-white shadow sm:rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <form onSubmit={onSubmit} className="space-y-6">
-            <div>
-              <label
-                htmlFor="company-name"
-                className="block text-sm font-medium text-gray-700"
-              >
-                {t('Company Name')}
-              </label>
-              <div className="mt-1">
-                <input
-                  type="text"
-                  name="company-name"
-                  id="company-name"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.currentTarget.value)}
-                  className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md border px-3 py-2"
-                  placeholder={t('Enter company name')}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t('Guidelines File')}
-              </label>
-              <div
-                className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md ${
-                  dragOver
-                    ? 'border-indigo-400 bg-indigo-50'
-                    : 'border-gray-300'
-                }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={onDrop}
-              >
-                <div className="space-y-1 text-center">
-                  <i
-                    className="fas fa-file-alt mx-auto h-12 w-12 text-gray-400 text-4xl"
-                    aria-hidden="true"
-                  />
-                  <div className="flex text-sm text-gray-600 justify-center">
-                    <label
-                      htmlFor="file-upload"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none"
-                    >
-                      <span>{t('Upload a file')}</span>
-                      <input
-                        id="file-upload"
-                        name="file-upload"
-                        type="file"
-                        className="sr-only"
-                        accept=".txt,text/plain"
-                        onChange={(e) =>
-                          pickFile(e.currentTarget.files?.[0] ?? null)
-                        }
-                      />
-                    </label>
-                    <p className="pl-1">{t('or drag and drop')}</p>
-                  </div>
-                  <p className="text-xs text-gray-500">{t('TXT file up to 10MB')}</p>
-                  {file && (
-                    <p className="text-sm text-gray-700 pt-2">
-                      {t('Selected: {name}').replace('{name}', file.name)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <FeedbackBanner
-              feedback={feedback ?? (error ? { tone: 'error', message: error } : null)}
+      <Panel>
+        <form onSubmit={onSubmit} className="space-y-5">
+          <div className="space-y-1.25">
+            <Label htmlFor="company-name">{t('Company Name')}</Label>
+            <Input
+              type="text"
+              name="company-name"
+              id="company-name"
+              required
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+              placeholder={t('Enter company name')}
             />
+          </div>
 
-            <div className="flex justify-end space-x-3">
-              <Link
-                to="/companies"
-                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                {t('Cancel')}
-              </Link>
-              <button
-                type="submit"
-                disabled={submitting || !name.trim()}
-                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-60"
-              >
-                {submitting ? t('Saving…') : t('Add Company')}
-              </button>
+          <div className="space-y-1.25">
+            <Label>{t('Guidelines File')}</Label>
+            <div
+              className={cn(
+                'mt-1 flex justify-center rounded-md border border-dashed px-6 py-8',
+                dragOver
+                  ? 'border-accent bg-accent-muted'
+                  : 'border-line bg-surface-sunken',
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+            >
+              <div className="space-y-2 text-center">
+                <FileIcon className="mx-auto size-8 text-ink-tertiary" />
+                <div className="flex justify-center text-14 text-ink-secondary">
+                  <label
+                    htmlFor="file-upload"
+                    className="relative cursor-pointer font-medium text-accent hover:text-accent-hover"
+                  >
+                    <span>{t('Upload a file')}</span>
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      className="sr-only"
+                      accept=".txt,text/plain"
+                      onChange={(e) =>
+                        pickFile(e.currentTarget.files?.[0] ?? null)
+                      }
+                    />
+                  </label>
+                  <p className="ps-1">{t('or drag and drop')}</p>
+                </div>
+                <p className="text-12 text-ink-tertiary">
+                  {t('TXT file up to 10MB')}
+                </p>
+                {file && (
+                  <p className="pt-2 text-14 text-ink-primary">
+                    {t('Selected: {name}').replace('{name}', file.name)}
+                  </p>
+                )}
+              </div>
             </div>
-          </form>
-        </div>
-      </div>
+          </div>
+
+          <FeedbackBanner
+            feedback={
+              feedback ?? (error ? { tone: 'error', message: error } : null)
+            }
+          />
+
+          <div className="flex justify-end gap-2">
+            <Link to="/companies">
+              <Button variant="secondary" type="button">
+                {t('Cancel')}
+              </Button>
+            </Link>
+            <Button
+              type="submit"
+              disabled={submitting || !name.trim()}
+            >
+              {submitting ? t('Saving…') : t('Add Company')}
+            </Button>
+          </div>
+        </form>
+      </Panel>
     </div>
   );
 }

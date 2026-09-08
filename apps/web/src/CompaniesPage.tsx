@@ -2,6 +2,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { io, type Socket } from 'socket.io-client';
 import {
+  AlertDialog,
+  Badge,
+  BuildingIcon,
+  Button,
+  ChatIcon,
+  cn,
+  EmptyState,
+  EyeIcon,
+  FileIcon,
+  PageHeader,
+  PageSkeleton,
+  Panel,
+  PlusIcon,
+  TrashIcon,
+  UploadIcon,
+} from '@shared/ui';
+import {
   apiFetch,
   getApiOrigin,
   getSocketPath,
@@ -49,7 +66,23 @@ function validationStatusLabel(status: string): string {
   return VALIDATION_STATUS_LABELS[status as GuidelineValidationStatus] ?? status;
 }
 
-
+function validationBadgeTone(
+  status: string,
+): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
+  switch (status) {
+    case 'valid':
+      return 'success';
+    case 'invalid':
+    case 'provider_error':
+      return 'danger';
+    case 'processing':
+      return 'info';
+    case 'pending':
+      return 'warning';
+    default:
+      return 'neutral';
+  }
+}
 
 function shortHash(value: string | null | undefined): string {
   return value ? `${value.slice(0, 12)}…` : '—';
@@ -57,10 +90,10 @@ function shortHash(value: string | null | undefined): string {
 
 function accentFor(name: string): { bg: string; icon: string } {
   const palette = [
-    { bg: 'bg-indigo-100', icon: 'text-indigo-600' },
-    { bg: 'bg-purple-100', icon: 'text-purple-600' },
-    { bg: 'bg-sky-100', icon: 'text-sky-600' },
-    { bg: 'bg-emerald-100', icon: 'text-emerald-600' },
+    { bg: 'bg-accent-muted', icon: 'text-accent' },
+    { bg: 'bg-info-muted', icon: 'text-info-foreground' },
+    { bg: 'bg-success-muted', icon: 'text-success-foreground' },
+    { bg: 'bg-warning-muted', icon: 'text-warning-foreground' },
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) {
@@ -78,6 +111,9 @@ export function CompaniesPage() {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingClearCompanyId, setPendingClearCompanyId] = useState<
+    string | null
+  >(null);
   const [viewing, setViewing] = useState<CompanyDetail | null>(null);
   const [viewingVersions, setViewingVersions] = useState<
     GuidelineVersionMeta[] | null
@@ -309,8 +345,9 @@ export function CompaniesPage() {
     }
   }
 
-  async function onClear(companyId: string) {
-    if (!window.confirm(t('Clear guidelines for this company?'))) return;
+  async function confirmClear() {
+    const companyId = pendingClearCompanyId;
+    if (!companyId) return;
     setBusyId(companyId);
     setError(null);
     setFeedback({ tone: 'info', message: t('Clearing active guideline…') });
@@ -334,6 +371,7 @@ export function CompaniesPage() {
         );
       }
       setFeedback({ tone: 'success', message: t('Active guideline cleared. Version history was preserved.') });
+      setPendingClearCompanyId(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : t('Clear failed');
       setError(message);
@@ -344,63 +382,58 @@ export function CompaniesPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-600">{t('Loading companies…')}</p>;
+    return <PageSkeleton />;
   }
 
   return (
     <div>
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('Companies')}</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            {t('Manage company information and guidelines')}
-          </p>
-        </div>
-        {canCreate && (
-          <div className="mt-4 md:mt-0">
-            <Link
-              to="/companies/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              <i className="fas fa-plus mr-2" aria-hidden="true" />
-              {t('Add Company')}
+      <PageHeader
+        title={t('Companies')}
+        description={t('Manage company information and guidelines')}
+        actions={
+          canCreate ? (
+            <Link to="/companies/new">
+              <Button>
+                <PlusIcon className="size-4 shrink-0" />
+                {t('Add Company')}
+              </Button>
             </Link>
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       <FeedbackBanner
         feedback={feedback ?? (error ? { tone: 'error', message: error } : null)}
       />
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
+      <Panel padded={false}>
         {companies.length === 0 ? (
-          <p className="px-4 py-8 text-sm text-gray-500 text-center">
-            {t('No companies available for your account.')}
-          </p>
+          <EmptyState title={t('No companies available for your account.')} />
         ) : (
-          <ul className="divide-y divide-gray-200">
+          <ul className="divide-y divide-line-subtle">
             {companies.map((company) => {
               const accent = accentFor(company.name);
               const busy = busyId === company.id;
               return (
                 <li key={company.id}>
-                  <div className="px-4 py-4 sm:px-6 hover:bg-gray-50 transition-colors duration-150">
-                    <div className="flex items-center justify-between gap-4 flex-wrap">
-                      <div className="flex items-center min-w-0">
+                  <div className="px-4 py-4 transition-colors duration-150 hover:bg-surface-hover sm:px-5">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center">
                         <div
-                          className={`flex-shrink-0 h-12 w-12 ${accent.bg} rounded-full flex items-center justify-center`}
+                          className={cn(
+                            'flex size-12 shrink-0 items-center justify-center rounded-full',
+                            accent.bg,
+                          )}
                         >
-                          <i
-                            className={`fas fa-building ${accent.icon} text-xl`}
-                            aria-hidden="true"
+                          <BuildingIcon
+                            className={cn('size-5', accent.icon)}
                           />
                         </div>
-                        <div className="ml-4 min-w-0">
-                          <div className="text-sm font-medium text-indigo-600 truncate">
+                        <div className="ms-4 min-w-0">
+                          <div className="truncate text-14 font-semibold text-ink-primary">
                             {company.name}
                           </div>
-                          <div className="text-sm text-gray-500 truncate">
+                          <div className="truncate text-13 text-ink-secondary">
                             {company.guidelineFileName
                               ? company.guidelineFileName
                               : t('No guidelines uploaded')}
@@ -408,18 +441,19 @@ export function CompaniesPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button
+                        <Button
                           type="button"
+                          variant="secondary"
+                          size="sm"
                           disabled={viewLoading}
                           onClick={() => {
                             setViewTab('replace');
                             void openGuidelines(company.id);
                           }}
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         >
-                          <i className="fas fa-eye mr-1" aria-hidden="true" />
+                          <EyeIcon className="size-3.5 shrink-0" />
                           {viewLoading ? t('Loading…') : t('View')}
-                        </button>
+                        </Button>
                         {canManage && (
                           <>
                             <input
@@ -437,46 +471,37 @@ export function CompaniesPage() {
                                 )
                               }
                             />
-                            <button
+                            <Button
                               type="button"
+                              variant="secondary"
+                              size="sm"
                               disabled={busy}
                               onClick={() => fileInputs.current[company.id]?.click()}
-                              className={`inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer ${
-                                busy ? 'opacity-60 pointer-events-none' : ''
-                              }`}
                             >
-                              <i
-                                className="fas fa-file-upload mr-1"
-                                aria-hidden="true"
-                              />
+                              <UploadIcon className="size-3.5 shrink-0" />
                               {company.hasGuidelines
                                 ? t('Replace Guidelines')
                                 : t('Upload Guidelines')}
-                            </button>
+                            </Button>
                             {company.hasGuidelines && (
-                              <button
+                              <Button
                                 type="button"
+                                variant="danger-soft"
+                                size="sm"
                                 disabled={busy}
-                                onClick={() => void onClear(company.id)}
-                                className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-60"
+                                onClick={() => setPendingClearCompanyId(company.id)}
                               >
-                                <i
-                                  className="fas fa-trash mr-1"
-                                  aria-hidden="true"
-                                />
+                                <TrashIcon className="size-3.5 shrink-0" />
                                 {t('Clear')}
-                              </button>
+                              </Button>
                             )}
                           </>
                         )}
                       </div>
                     </div>
                     <div className="mt-2 sm:flex sm:justify-between">
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-                        <i
-                          className="fas fa-file-alt flex-shrink-0 mr-1.5 text-gray-400"
-                          aria-hidden="true"
-                        />
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-13 text-ink-tertiary">
+                        <FileIcon className="size-3.5 shrink-0 text-ink-tertiary" />
                         <p>
                           {company.currentVersion
                             ? t('Version {n} · updated on ').replace('{n}', String(company.currentVersion))
@@ -489,7 +514,7 @@ export function CompaniesPage() {
                           </time>
                         </p>
                         {company.latestValidVersion && (
-                          <p className="text-xs text-gray-500">
+                          <p className="text-12 text-ink-tertiary">
                             {t('Latest valid: v{n}').replace('{n}', String(company.latestValidVersion))}
                             {company.latestValidVersionHash
                               ? ` · ${shortHash(company.latestValidVersionHash)}`
@@ -497,11 +522,8 @@ export function CompaniesPage() {
                           </p>
                         )}
                       </div>
-                      <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                        <i
-                          className="fas fa-comments flex-shrink-0 mr-1.5 text-gray-400"
-                          aria-hidden="true"
-                        />
+                      <div className="mt-2 flex items-center text-13 text-ink-tertiary sm:mt-0">
+                        <ChatIcon className="me-1.5 size-3.5 shrink-0 text-ink-tertiary" />
                         <p>
                           {t('{n} support conversations').replace('{n}', String(company.messageCount ?? 0))}
                         </p>
@@ -513,47 +535,75 @@ export function CompaniesPage() {
             })}
           </ul>
         )}
-      </div>
+      </Panel>
+
+      <AlertDialog
+        open={pendingClearCompanyId !== null}
+        title={t('Clear')}
+        description={t('Clear guidelines for this company?')}
+        confirmLabel={t('Clear')}
+        cancelLabel={t('Cancel')}
+        tone="danger"
+        busy={Boolean(
+          pendingClearCompanyId && busyId === pendingClearCompanyId,
+        )}
+        onCancel={() => setPendingClearCompanyId(null)}
+        onConfirm={() => void confirmClear()}
+      />
 
       {viewing && (
         <div
-          className="fixed inset-0 z-20 flex items-center justify-center bg-gray-900/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="guidelines-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="presentation"
         >
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col">
-            <div className="px-4 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
-              <div>
+          <button
+            type="button"
+            aria-label={t('Close')}
+            className="absolute inset-0 bg-scrim"
+            onClick={() => {
+              setViewing(null);
+              setViewingVersions(null);
+              setHistoryDetail(null);
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="guidelines-title"
+            className="relative z-10 flex max-h-[85vh] w-full max-w-4xl flex-col rounded-md border border-line bg-surface-overlay shadow-overlay"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-line px-4 py-4 sm:px-5">
+              <div className="min-w-0">
                 <h2
                   id="guidelines-title"
-                  className="text-lg font-semibold text-gray-900"
+                  className="text-balance text-16 font-semibold text-ink-primary"
                 >
                   {t('{name} guidelines').replace('{name}', viewing.name)}
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="mt-1 text-pretty text-13 text-ink-secondary">
                   {viewing.guidelineFileName ?? t('No file uploaded')}
                   {viewing.currentVersion
                     ? ` · ${t('active version {n}').replace('{n}', String(viewing.currentVersion))}`
                     : ''}
                   {viewing.guidelineUpdatedAt
-                     ? ` · ${t('Updated {when}').replace('{when}', formatTimestamp(viewing.guidelineUpdatedAt, t('Never')))}`
+                    ? ` · ${t('Updated {when}').replace('{when}', formatTimestamp(viewing.guidelineUpdatedAt, t('Never')))}`
                     : ''}
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setViewing(null);
                   setViewingVersions(null);
                   setHistoryDetail(null);
                 }}
-                className="text-gray-400 hover:text-gray-600 text-sm font-medium"
               >
                 {t('Close')}
-              </button>
+              </Button>
             </div>
-            <div className="flex border-b border-gray-200 px-4" role="tablist">
+            <div className="flex border-b border-line px-4 sm:px-5" role="tablist">
               {(['replace', 'history'] as const).map((tab) => (
                 <button
                   key={tab}
@@ -561,11 +611,12 @@ export function CompaniesPage() {
                   role="tab"
                   aria-selected={viewTab === tab}
                   onClick={() => setViewTab(tab)}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 ${
+                  className={cn(
+                    'border-b-2 px-4 py-3 text-13 font-medium transition-colors',
                     viewTab === tab
-                      ? 'border-indigo-600 text-indigo-700'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
+                      ? 'border-accent text-accent'
+                      : 'border-transparent text-ink-tertiary hover:text-ink-secondary',
+                  )}
                 >
                   {tab === 'replace' ? t('Current & Replace') : t('History')}
                 </button>
@@ -573,73 +624,82 @@ export function CompaniesPage() {
             </div>
 
             {viewTab === 'replace' ? (
-              <div className="min-h-0 overflow-auto p-4 space-y-4">
+              <div className="min-h-0 space-y-4 overflow-auto p-4 sm:p-5">
                 {pendingReplacement && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3">
-                    <div className="text-sm text-amber-900">
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-warning-muted p-3">
+                    <div className="text-13 text-warning-foreground">
                       <p className="font-medium">
                         {t('Replacement v{n}').replace('{n}', String(pendingReplacement.version))}:
                         {' '}
                         {t(validationStatusLabel(pendingReplacement.status))}
                       </p>
-                      <p className="text-xs mt-1">
+                      <p className="mt-1 text-12">
                         {t('Current {v} remains active until validation succeeds.').replace('{v}', viewing.currentVersion ? `v${viewing.currentVersion}` : t('None'))}
                       </p>
                     </div>
                     {canManage && pendingReplacement.status === 'pending' && (
-                      <button
+                      <Button
                         type="button"
+                        variant="danger-soft"
+                        size="sm"
                         disabled={busyId === viewing.id}
                         onClick={() =>
                           void cancelPending(viewing.id, pendingReplacement.id)
                         }
-                        className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-60"
                       >
                         {t('Cancel pending')}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
-                <div className="text-xs text-gray-600">
-                  <span className="font-medium text-gray-700">{t('Active:')}</span>{' '}
+                <div className="text-12 text-ink-secondary">
+                  <span className="font-medium text-ink-primary">{t('Active:')}</span>{' '}
                   {viewing.currentVersion
                     ? `v${viewing.currentVersion} · ${shortHash(activeVersionMeta?.contentHash)}`
                     : t('None')}
                 </div>
-                <pre className="rounded-md bg-gray-50 border border-gray-200 p-4 text-sm text-gray-800 whitespace-pre-wrap">
+                <pre className="whitespace-pre-wrap rounded-md border border-line bg-surface-sunken p-4 text-13 text-ink-primary">
                   {viewing.guidelineText?.trim()
                     ? viewing.guidelineText
                     : t('No validated guideline is active for this company.')}
                 </pre>
               </div>
             ) : (
-              <div className="min-h-0 overflow-hidden p-4 flex gap-4">
+              <div className="flex min-h-0 gap-4 overflow-hidden p-4 sm:p-5">
                 {!viewingVersions?.length ? (
-                  <p className="text-sm text-gray-500">{t('No guideline history.')}</p>
+                  <p className="text-13 text-ink-secondary">{t('No guideline history.')}</p>
                 ) : (
-                  <ul className="w-64 shrink-0 overflow-auto divide-y divide-gray-100 border border-gray-200 rounded-md">
+                  <ul className="w-64 shrink-0 divide-y divide-line-subtle overflow-auto rounded-md border border-line">
                     {viewingVersions.map((version) => (
                       <li key={version.id}>
                         <button
                           type="button"
                           disabled={historyLoadingId === version.id}
                           onClick={() => void inspectVersion(viewing.id, version.id)}
-                          className={`w-full p-3 text-left hover:bg-gray-50 ${
+                          className={cn(
+                            'w-full p-3 text-start transition-colors',
                             historyDetail?.id === version.id
-                              ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200'
-                              : ''
-                          }`}
+                              ? 'bg-accent-muted ring-1 ring-inset ring-accent/30'
+                              : 'hover:bg-surface-hover',
+                          )}
                         >
-                          <span className="block font-medium text-gray-800">
-                            {historyLoadingId === version.id
-                              ? t('Loading…')
-                              : `v${version.version} · ${t(validationStatusLabel(version.status))}`}
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-13 font-medium text-ink-primary">
+                              {historyLoadingId === version.id
+                                ? t('Loading…')
+                                : `v${version.version}`}
+                            </span>
+                            {historyLoadingId !== version.id && (
+                              <Badge tone={validationBadgeTone(version.status)}>
+                                {t(validationStatusLabel(version.status))}
+                              </Badge>
+                            )}
                           </span>
-                          <span className="block text-xs text-gray-500 mt-1">
+                          <span className="mt-1 block truncate text-12 text-ink-tertiary">
                             {version.fileName ?? 'guidelines.txt'}
                           </span>
                           <time
-                            className="block text-xs text-gray-500 mt-1"
+                            className="mt-1 block text-12 text-ink-tertiary"
                             dateTime={version.createdAt}
                             title={version.createdAt}
                           >
@@ -647,7 +707,7 @@ export function CompaniesPage() {
                           </time>
                           {version.validatedAt && (
                             <time
-                              className="block text-xs text-gray-500 mt-1"
+                              className="mt-1 block text-12 text-ink-tertiary"
                               dateTime={version.validatedAt}
                               title={version.validatedAt}
                             >
@@ -655,41 +715,43 @@ export function CompaniesPage() {
                             </time>
                           )}
                           {version.validationReason && (
-                            <span className="block truncate text-xs text-gray-500 mt-1">
+                            <span className="mt-1 block truncate text-12 text-ink-tertiary">
                               {version.validationReason}
                             </span>
                           )}
                         </button>
                         {canManage && version.status === 'pending' && (
-                          <button
+                          <Button
                             type="button"
+                            variant="danger-soft"
+                            size="sm"
                             disabled={busyId === viewing.id}
                             onClick={() => void cancelPending(viewing.id, version.id)}
-                            className="ml-3 mb-2 text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-60"
+                            className="ms-3 mb-2"
                           >
                             {t('Cancel')}
-                          </button>
+                          </Button>
                         )}
                       </li>
                     ))}
                   </ul>
                 )}
-                <div className="min-w-0 flex-1 overflow-auto rounded-md border border-gray-200">
+                <div className="min-w-0 flex-1 overflow-auto rounded-md border border-line">
                   {historyDetail ? (
-                    <div className="border-b border-gray-200 px-3 py-2 text-sm font-medium text-gray-700">
+                    <div className="border-b border-line px-3 py-2 text-13 font-medium text-ink-primary">
                       <div>{t('Version {n} snapshot').replace('{n}', String(historyDetail.version))}</div>
-                      <div className="mt-1 text-xs font-normal text-gray-500">
+                      <div className="mt-1 text-12 font-normal text-ink-tertiary">
                         {t('Created {when}').replace('{when}', formatTimestamp(historyDetail.createdAt, t('Never')))}
                         {historyDetail.validatedAt
                           ? ` · ${t('Processed {when}').replace('{when}', formatTimestamp(historyDetail.validatedAt, t('Never')))}`
                           : ''}
                       </div>
-                      <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-800">
+                      <pre className="mt-3 whitespace-pre-wrap text-13 text-ink-primary">
                         {historyDetail.content}
                       </pre>
                     </div>
                   ) : (
-                    <p className="p-4 text-sm text-gray-500">
+                    <p className="p-4 text-13 text-ink-secondary">
                       {t('Select a version to inspect its guideline context.')}
                     </p>
                   )}

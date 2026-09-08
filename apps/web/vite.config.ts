@@ -10,7 +10,19 @@ export default defineConfig({
   resolve: {
     alias: {
       '@shared/auth': path.resolve(rootDir, '../shared/auth/index.ts'),
+      '@shared/ui': path.resolve(rootDir, '../shared/ui'),
+      react: path.resolve(rootDir, 'node_modules/react'),
+      'react-dom': path.resolve(rootDir, 'node_modules/react-dom'),
+      'react/jsx-runtime': path.resolve(
+        rootDir,
+        'node_modules/react/jsx-runtime.js',
+      ),
+      'react/jsx-dev-runtime': path.resolve(
+        rootDir,
+        'node_modules/react/jsx-dev-runtime.js',
+      ),
     },
+    dedupe: ['react', 'react-dom'],
   },
   server: {
     host: true,
