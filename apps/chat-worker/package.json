@@ -48,6 +48,9 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^@nestjs/config$": "<rootDir>/testing/nestjs-config-stub.ts"
+    },
     "testEnvironment": "node"
   }
 }

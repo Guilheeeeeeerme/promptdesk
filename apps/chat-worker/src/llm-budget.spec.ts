@@ -44,7 +44,8 @@ describe('LlmBudgetService', () => {
   });
 
   it('halts when the per-minute rate limit is exceeded', async () => {
-    mockRedis.incr.mockResolvedValueOnce(DEFAULT_LLM_RATE_LIMIT_PER_MINUTE + 1);
+    // Both the probe call and assertAllowed must observe the over-limit counter.
+    mockRedis.incr.mockResolvedValue(DEFAULT_LLM_RATE_LIMIT_PER_MINUTE + 1);
     const service = new LlmBudgetService(configOf() as never);
 
     await expect(service.checkAllowance('company-1')).resolves.toBe(

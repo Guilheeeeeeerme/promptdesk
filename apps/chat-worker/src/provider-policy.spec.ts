@@ -3,6 +3,7 @@ import {
   resolveProviderOrder,
   type GuidelineModelProvider,
 } from './provider-policy';
+import { LlmBudgetExceededError } from './llm-budget';
 
 function provider(
   implementation: (content: string, model?: string) => Promise<unknown>,
@@ -107,7 +108,6 @@ describe('Gemini-first cheapest-model policy', () => {
   });
 
   it('halts provider failover when the company LLM budget is exceeded', async () => {
-    const { LlmBudgetExceededError } = await import('./llm-budget');
     const calls: string[] = [];
     const selected = createGeminiFirstGuidelineProvider(
       provider(async (_, model) => {
