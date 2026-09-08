@@ -5,6 +5,7 @@ import {
   getToken,
   isAllowedReturnUrl,
 } from '@shared/auth';
+import { Banner, Button, Input, Label, Panel, ThemeToggle } from '@shared/ui';
 import { getAllowedReturnOrigins } from './api';
 import { useAuth } from './auth';
 import { useLocale } from './locale';
@@ -30,7 +31,7 @@ export function LoginPage() {
     if (validReturnUrl && token) {
       window.location.assign(appendTokenToReturnUrl(validReturnUrl, token));
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
+        <div className="flex min-h-dvh items-center justify-center bg-surface-base text-14 text-ink-secondary">
           {t('Continuing…')}
         </div>
       );
@@ -63,79 +64,71 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-x-hidden">
+    <div className="relative flex min-h-dvh flex-col justify-center overflow-x-hidden bg-surface-base px-4 py-12 sm:px-6 lg:px-8">
+      <div className="absolute end-4 top-4 safe-area-inset">
+        <ThemeToggle labelDark={t('Dark mode')} labelLight={t('Light mode')} />
+      </div>
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h1 className="text-center text-3xl font-bold text-indigo-600">
+        <p className="text-center text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+          PromptDesk
+        </p>
+        <h1 className="mt-2 text-balance text-center text-[32px] font-bold leading-9 text-ink-primary">
           {t('AI Support Assistant')}
         </h1>
-        <p className="mt-2 text-center text-sm text-gray-600">
+        <p className="mt-2 text-pretty text-center text-14 text-ink-secondary">
           {validReturnUrl ? t('Sign in to continue') : t('Sign in to your account')}
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={onSubmit}>
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700"
-              >
-                {t('Email')}
-              </label>
-              <input
+        <Panel>
+          <form className="space-y-5" onSubmit={onSubmit}>
+            <div className="space-y-1.25">
+              <Label htmlFor="email">{t('Email')}</Label>
+              <Input
                 id="email"
                 type="email"
                 autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
               />
             </div>
 
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-700"
-              >
-                {t('Password')}
-              </label>
-              <input
+            <div className="space-y-1.25">
+              <Label htmlFor="password">{t('Password')}</Label>
+              <Input
                 id="password"
                 type="password"
                 autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
               />
             </div>
 
-            {error && (
-              <p className="text-sm text-red-600" role="alert">
-                {t(error)}
-              </p>
-            )}
+            {error && <Banner tone="error">{t(error)}</Banner>}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-60"
-            >
+            <Button type="submit" disabled={submitting} className="w-full">
               {submitting ? t('Signing in…') : t('Sign in')}
-            </button>
-            <p className="text-center text-sm text-gray-600">
+            </Button>
+
+            <p className="text-center text-14 text-ink-secondary">
               {t('Need a company account?')}{' '}
               <Link
-                to={validReturnUrl ? `/register?returnUrl=${encodeURIComponent(validReturnUrl)}` : '/register'}
-                className="font-medium text-indigo-600 hover:text-indigo-500"
+                to={
+                  validReturnUrl
+                    ? `/register?returnUrl=${encodeURIComponent(validReturnUrl)}`
+                    : '/register'
+                }
+                className="font-medium text-accent hover:text-accent-hover"
               >
                 {t('Create a company account')}
               </Link>
             </p>
           </form>
-        </div>
+        </Panel>
       </div>
     </div>
   );

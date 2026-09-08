@@ -6,7 +6,21 @@ import {
   type MouseEvent,
 } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { appendTokenToReturnUrl, LOCALE_LABELS, SUPPORTED_LOCALES } from '@shared/auth';
+import {
+  appendTokenToReturnUrl,
+  LOCALE_LABELS,
+  SUPPORTED_LOCALES,
+} from '@shared/auth';
+import {
+  Banner,
+  Button,
+  ExternalLinkIcon,
+  IconButton,
+  MenuIcon,
+  Select,
+  ThemeToggle,
+  cn,
+} from '@shared/ui';
 import { getToken, SUPPORT_ORIGIN } from './api';
 import { useAuth } from './auth';
 import type { Role } from './types';
@@ -21,7 +35,6 @@ const navItems: Array<{
   { to: '/', label: 'Home', exact: true },
   { to: '/history', label: 'History' },
   { to: '/companies', label: 'Companies' },
-
   { to: '/users', label: 'Users', roles: ['root', 'admin', 'manager', 'owner'] },
 ];
 
@@ -33,22 +46,28 @@ function supportHref(): string {
   return token ? appendTokenToReturnUrl(base, token) : base;
 }
 
-function ExternalLinkIcon({ className }: { className?: string }) {
+function NavLinkItem({
+  to,
+  label,
+  active,
+}: {
+  to: string;
+  label: string;
+  active: boolean;
+}) {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
+    <Link
+      to={to}
+      className={cn(
+        'flex items-center rounded-sm px-3 py-2 text-14 font-medium',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+        active
+          ? 'bg-accent-muted text-info-foreground'
+          : 'text-ink-secondary hover:bg-surface-hover hover:text-ink-primary',
+      )}
     >
-      <path d="M6.5 3.5H3.5A1 1 0 0 0 2.5 4.5v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
-      <path d="M9.5 2.5h4v4" />
-      <path d="M7.5 8.5 13.5 2.5" />
-    </svg>
+      {label}
+    </Link>
   );
 }
 
@@ -96,7 +115,7 @@ export function AppShell() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
+      <div className="flex min-h-dvh items-center justify-center bg-surface-base text-14 text-ink-secondary">
         {t('Loading session…')}
       </div>
     );
@@ -123,8 +142,6 @@ export function AppShell() {
   }
 
   function openSupport(e: MouseEvent<HTMLAnchorElement>) {
-    // Always hand the current Main token so Support shares the
-    // same Redis session (including latest activeCompanyId).
     e.preventDefault();
     setNavOpen(false);
     window.open(supportHref(), '_blank', 'noopener,noreferrer');
@@ -141,246 +158,250 @@ export function AppShell() {
   );
 
   return (
-    <div className="min-h-dvh flex bg-gray-50 overflow-x-hidden">
-      <aside className="hidden md:flex md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 bg-white border-r border-gray-200 flex-col">
-        <div className="px-6 py-6 border-b border-gray-100">
-          <h1 className="text-xl font-bold text-indigo-600 leading-tight">
+    <div className="flex min-h-dvh overflow-x-hidden bg-surface-base">
+      <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-52 md:shrink-0 md:flex-col md:border-e md:border-line">
+        <div className="border-b border-line-subtle px-4 py-5">
+          <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+            PromptDesk
+          </p>
+          <h1 className="mt-1 text-balance text-15 font-semibold text-ink-primary">
             {t('AI Support Assistant')}
           </h1>
         </div>
-        {canSwitchCompany && (
-          <div className="px-4 py-5 border-b border-gray-100">
+        {canSwitchCompany ? (
+          <div className="border-b border-line-subtle px-4 py-4">
             <label
               htmlFor="company-switcher"
-              className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
+              className="mb-1.25 block text-12 font-medium text-ink-tertiary"
             >
               {t('Company')}
             </label>
-            <select
+            <Select
               id="company-switcher"
               disabled={switching}
               value={session.activeCompany?.id ?? ''}
               onChange={onCompanyChange}
-              className="w-full rounded-md border-gray-300 shadow-sm text-sm py-2 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+              className="py-1.5 text-13"
             >
               {companies.map((company) => (
                 <option key={company.id} value={company.id}>
                   {company.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
-        )}
-        {!canSwitchCompany && (
-          <div className="px-4 py-5 border-b border-gray-100">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+        ) : (
+          <div className="border-b border-line-subtle px-4 py-4">
+            <span className="mb-1.25 block text-12 font-medium text-ink-tertiary">
               {t('Company')}
             </span>
-            <span className="block truncate text-sm font-medium text-gray-900">
+            <span className="block truncate text-14 font-medium text-ink-primary">
               {session.activeCompany?.name ?? t('No company')}
             </span>
           </div>
         )}
-        <nav aria-label={t('Main navigation')} className="flex-1 px-3 py-5 space-y-1">
-          {visibleNavItems.map((item) => {
-            const active = isActive(item);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`flex items-center rounded-md px-3 py-2.5 text-sm font-medium ${
-                  active
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                {t(item.label)}
-              </Link>
-            );
-          })}
+        <nav
+          aria-label={t('Main navigation')}
+          className="flex-1 space-y-1 px-2 py-4"
+        >
+          {visibleNavItems.map((item) => (
+            <NavLinkItem
+              key={item.to}
+              to={item.to}
+              label={t(item.label)}
+              active={isActive(item)}
+            />
+          ))}
         </nav>
       </aside>
 
-      <div className="min-w-0 flex-1 flex flex-col">
-      <nav className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-14 sm:h-16 gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <button
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-40 border-b border-line bg-surface-base supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]">
+          <div className="mx-auto flex h-[52px] max-w-content items-center justify-between gap-3 px-4 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2">
+              <IconButton
                 ref={menuButtonRef}
-                type="button"
-                className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 shrink-0"
-                aria-label={t('Open navigation menu')}
+                label={t('Open navigation menu')}
                 aria-expanded={navOpen}
                 aria-controls="main-nav-drawer"
+                className="md:hidden"
                 onClick={() => setNavOpen(true)}
               >
-                <span aria-hidden="true" className="block w-4 space-y-1">
-                  <span className="block h-px bg-current" />
-                  <span className="block h-px bg-current" />
-                  <span className="block h-px bg-current" />
-                </span>
-              </button>
-              <h1 className="md:hidden text-lg sm:text-xl font-bold text-indigo-600 truncate">
-                {t('AI Support Assistant')}
+                <MenuIcon className="size-4" />
+              </IconButton>
+              <h1 className="truncate text-15 font-semibold text-ink-primary md:hidden">
+                PromptDesk
               </h1>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <a
                 href={supportHref()}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={openSupport}
                 aria-label={t('Chat (opens in new tab)')}
-                className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-indigo-700"
+                className="inline-flex items-center gap-1 rounded-sm px-2 py-1.5 text-13 font-medium text-ink-secondary hover:bg-surface-hover hover:text-ink-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {t('Chat')}
                 <ExternalLinkIcon className="size-3.5 shrink-0" />
               </a>
-                <div className="relative">
-                  <button
-                    type="button"
-                    aria-expanded={userMenuOpen}
-                    aria-haspopup="menu"
-                    onClick={() => setUserMenuOpen((open) => !open)}
-                    className="max-w-[9rem] truncate text-sm font-medium text-gray-700 hover:text-indigo-700"
+              <ThemeToggle
+                labelDark={t('Dark mode')}
+                labelLight={t('Light mode')}
+              />
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  className="max-w-[9rem] truncate"
+                >
+                  {session.user.name}
+                </Button>
+                {userMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute end-0 mt-1.25 w-52 rounded-md border border-line bg-surface-overlay py-1 shadow-overlay"
                   >
-                    {session.user.name}
-                  </button>
-                  {userMenuOpen && (
-                    <div
-                      role="menu"
-                      className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
-                    >
-                      <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
-                        {session.user.email}
-                      </div>
-                      <label className="block px-3 pt-2 text-xs text-gray-500" htmlFor="language-select">{t('Language')}</label>
-                      <select id="language-select" value={locale} onChange={(e) => void setLocale(e.target.value as typeof locale)} className="mx-3 my-1 w-[calc(100%-1.5rem)] rounded border border-gray-300 px-2 py-1 text-sm">
-                        {SUPPORTED_LOCALES.map((supported) => (
-                          <option key={supported} value={supported}>{LOCALE_LABELS[supported]}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => void logout()}
-                        className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        {t('Log out')}
-                      </button>
+                    <div className="border-b border-line-subtle px-3 py-2 text-12 text-ink-tertiary">
+                      {session.user.email}
                     </div>
-                  )}
-                </div>
+                    <label
+                      className="block px-3 pt-2 text-12 text-ink-tertiary"
+                      htmlFor="language-select"
+                    >
+                      {t('Language')}
+                    </label>
+                    <Select
+                      id="language-select"
+                      value={locale}
+                      onChange={(e) =>
+                        void setLocale(e.target.value as typeof locale)
+                      }
+                      className="mx-3 my-1 w-[calc(100%-1.5rem)] py-1 text-13"
+                    >
+                      {SUPPORTED_LOCALES.map((supported) => (
+                        <option key={supported} value={supported}>
+                          {LOCALE_LABELS[supported]}
+                        </option>
+                      ))}
+                    </Select>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void logout()}
+                      className="block w-full px-3 py-2 text-start text-14 text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
+                    >
+                      {t('Log out')}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
+        </header>
 
-      {navOpen && (
-        <button
-          type="button"
-          aria-label={t('Close navigation menu')}
-          className="fixed inset-0 z-40 bg-gray-900/40 md:hidden"
-          onClick={() => setNavOpen(false)}
-        />
-      )}
-
-      <aside
-        ref={drawerRef}
-        id="main-nav-drawer"
-        aria-label={t('Main navigation')}
-        className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:hidden ${
-          navOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-gray-900">{t('Menu')}</p>
+        {navOpen && (
           <button
             type="button"
-            onClick={() => setNavOpen(false)}
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
             aria-label={t('Close navigation menu')}
-          >
-            {t('Close')}
-          </button>
-        </div>
-        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
-          {visibleNavItems.map((item) => {
-            const active = isActive(item);
-            return (
-              <Link
+            className="fixed inset-0 z-40 bg-scrim md:hidden"
+            onClick={() => setNavOpen(false)}
+          />
+        )}
+
+        <aside
+          ref={drawerRef}
+          id="main-nav-drawer"
+          aria-label={t('Main navigation')}
+          className={cn(
+            'fixed inset-y-0 start-0 z-50 flex w-[min(18rem,88vw)] flex-col border-e border-line bg-surface-raised md:hidden',
+            'transition-transform duration-200 ease-out',
+            'supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]',
+            navOpen ? 'translate-x-0' : '-translate-x-full',
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-line-subtle px-4 py-3">
+            <p className="text-14 font-semibold text-ink-primary">{t('Menu')}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setNavOpen(false)}
+              aria-label={t('Close navigation menu')}
+            >
+              {t('Close')}
+            </Button>
+          </div>
+          <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+            {visibleNavItems.map((item) => (
+              <NavLinkItem
                 key={item.to}
                 to={item.to}
-                className={`block rounded-md px-3 py-2.5 text-sm font-medium ${
-                  active
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
+                label={t(item.label)}
+                active={isActive(item)}
+              />
+            ))}
+            <a
+              href={supportHref()}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={openSupport}
+              className="flex items-center gap-1.5 rounded-sm px-3 py-2 text-14 font-medium text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
+              aria-label={t('Chat (opens in new tab)')}
+            >
+              {t('Chat')}
+              <ExternalLinkIcon className="size-3.5 shrink-0" />
+            </a>
+          </nav>
+          {canSwitchCompany && (
+            <div className="border-t border-line-subtle px-4 py-3 sm:hidden">
+              <label
+                htmlFor="company-switcher-mobile"
+                className="mb-1 block text-12 font-medium text-ink-tertiary"
               >
-                {t(item.label)}
-              </Link>
-            );
-          })}
-          <a
-            href={supportHref()}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={openSupport}
-            className="flex items-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            aria-label={t('Chat (opens in new tab)')}
-          >
-            {t('Chat')}
-            <ExternalLinkIcon className="size-3.5 shrink-0" />
-          </a>
-        </nav>
-        {canSwitchCompany && (
-          <div className="border-t border-gray-100 px-4 py-3 sm:hidden">
-            <label
-              htmlFor="company-switcher-mobile"
-              className="block text-xs font-medium text-gray-500 mb-1"
-            >
-              {t('Company')}
-            </label>
-            <select
-              id="company-switcher-mobile"
-              disabled={switching}
-              value={session.activeCompany?.id ?? ''}
-              onChange={onCompanyChange}
-              className="w-full rounded-md border-gray-300 shadow-sm text-sm py-2 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
-            >
-              {companies.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
+                {t('Company')}
+              </label>
+              <Select
+                id="company-switcher-mobile"
+                disabled={switching}
+                value={session.activeCompany?.id ?? ''}
+                onChange={onCompanyChange}
+                className="py-1.5 text-13"
+              >
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+          {!canSwitchCompany && (
+            <div className="border-t border-line-subtle px-4 py-3 sm:hidden">
+              <span className="mb-1 block text-12 font-medium text-ink-tertiary">
+                {t('Company')}
+              </span>
+              <span className="block truncate text-14 font-medium text-ink-primary">
+                {session.activeCompany?.name ?? t('No company')}
+              </span>
+            </div>
+          )}
+          <div className="border-t border-line-subtle px-4 py-3 text-12 text-ink-tertiary">
+            {session.user.name} ({t(session.user.role)})
           </div>
-        )}
-        {!canSwitchCompany && (
-          <div className="border-t border-gray-100 px-4 py-3 sm:hidden">
-            <span className="block text-xs font-medium text-gray-500 mb-1">
-              {t('Company')}
-            </span>
-            <span className="block truncate text-sm font-medium text-gray-900">
-              {session.activeCompany?.name ?? t('No company')}
-            </span>
-          </div>
-        )}
-        <div className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
-          {session.user.name} ({t(session.user.role)})
-        </div>
-      </aside>
+        </aside>
 
-      {switchError && (
-        <div className="bg-red-50 border-b border-red-100 text-red-700 text-sm px-4 py-2 text-center">
-          {switchError}
-        </div>
-      )}
+        {switchError && (
+          <Banner tone="error" className="rounded-none border-x-0 border-t-0">
+            {switchError}
+          </Banner>
+        )}
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 min-w-0">
-        <Outlet />
-      </main>
+        <main className="mx-auto w-full max-w-content min-w-0 flex-1 px-4 py-4 sm:px-5 sm:py-6">
+          <Outlet />
+        </main>
       </div>
     </div>
   );

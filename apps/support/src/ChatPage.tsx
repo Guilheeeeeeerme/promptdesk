@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
+import {
+  AlertDialog,
+  Badge,
+  Banner,
+  Button,
+  cn,
+  EmptyState,
+  IconButton,
+  Input,
+  MenuIcon,
+  PlusIcon,
+  Select,
+  Textarea,
+  ThemeToggle,
+} from '@shared/ui';
 import { LOCALE_LABELS, SUPPORTED_LOCALES } from '@shared/auth';
+import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
 import { useAuth } from './auth';
 import { useLocale } from './locale';
 
@@ -50,11 +65,14 @@ const STATUS_LABELS: Record<ConversationStatus, string> = {
   wont_solve: "Won't solve",
 };
 
-const STATUS_BADGES: Record<ConversationStatus, string> = {
-  open: 'bg-gray-100 text-gray-700',
-  solved: 'bg-emerald-100 text-emerald-700',
-  not_solved: 'bg-rose-100 text-rose-700',
-  wont_solve: 'bg-slate-200 text-slate-600',
+const STATUS_BADGE_TONES: Record<
+  ConversationStatus,
+  'neutral' | 'success' | 'danger' | 'warning'
+> = {
+  open: 'neutral',
+  solved: 'success',
+  not_solved: 'danger',
+  wont_solve: 'warning',
 };
 
 /** Full sentences so the status word can be declined per language. */
@@ -200,6 +218,8 @@ export function ChatPage() {
   const [search, setSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const userMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -445,22 +465,27 @@ export function ChatPage() {
     [loadConversations, t],
   );
 
-  const onDelete = useCallback(
-    async (id: string) => {
+  const confirmDelete = useCallback(
+    async () => {
+      const id = deleteTargetId;
+      if (!id) return;
       setError(null);
-      if (!window.confirm(t('Delete this conversation?'))) return;
+      setDeleting(true);
       try {
         await apiFetch(`/chat/conversations/${id}`, { method: 'DELETE' });
         if (id === activeId) {
           setActiveId(null);
           setMessages([]);
         }
+        setDeleteTargetId(null);
         await loadConversations();
       } catch (err) {
         setError(err instanceof Error ? err.message : t("Couldn't delete — try again."));
+      } finally {
+        setDeleting(false);
       }
     },
-    [activeId, loadConversations, t],
+    [deleteTargetId, activeId, loadConversations, t],
   );
 
   const onSend = useCallback(
@@ -627,7 +652,7 @@ export function ChatPage() {
 
   if (loading || !session) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
+      <div className="flex h-dvh items-center justify-center bg-surface-base text-14 text-ink-secondary">
         {t('Loading…')}
       </div>
     );
@@ -660,74 +685,98 @@ export function ChatPage() {
   }
 
   return (
-    <div className="h-dvh flex flex-col bg-gray-50 overflow-hidden">
-      <nav className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-14 sm:h-16 gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold text-indigo-600 truncate">
-                {t('AI Support Assistant')}
-              </h1>
-              <span className="hidden sm:inline-flex border-indigo-500 text-gray-900 items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                {t('Chat')}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="relative">
-                <button
-                  ref={userMenuButtonRef}
-                  type="button"
-                  aria-expanded={userMenuOpen}
-                  aria-haspopup="menu"
-                  aria-controls="support-account-menu"
-                  onClick={() => setUserMenuOpen((open) => !open)}
-                  className="max-w-[9rem] truncate text-sm font-medium text-gray-700 hover:text-indigo-700"
+    <div className="flex h-dvh flex-col overflow-hidden bg-surface-base">
+      <header className="sticky top-0 z-40 border-b border-line bg-surface-base supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex h-[52px] max-w-content items-center justify-between gap-3 px-4 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <p className="hidden text-12 font-medium uppercase tracking-wide text-ink-tertiary sm:block">
+              PromptDesk
+            </p>
+            <h1 className="truncate text-15 font-semibold text-ink-primary">
+              {t('AI Support Assistant')}
+            </h1>
+            <span className="hidden text-13 font-medium text-ink-secondary sm:inline">
+              {t('Chat')}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <ThemeToggle
+              labelDark={t('Dark mode')}
+              labelLight={t('Light mode')}
+            />
+            <div className="relative">
+              <Button
+                ref={userMenuButtonRef}
+                variant="ghost"
+                size="sm"
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+                aria-controls="support-account-menu"
+                onClick={() => setUserMenuOpen((open) => !open)}
+                className="max-w-[9rem] truncate"
+              >
+                {session.user.name}
+              </Button>
+              {userMenuOpen && (
+                <div
+                  id="support-account-menu"
+                  role="menu"
+                  className="absolute end-0 mt-1.25 w-52 rounded-md border border-line bg-surface-overlay py-1 shadow-overlay"
                 >
-                  {session.user.name}
-                </button>
-                {userMenuOpen && (
-                  <div
-                    id="support-account-menu"
-                    role="menu"
-                    className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
-                  >
-                    <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
-                      {session.user.email}
-                    </div>
-                    <label className="block px-3 pt-2 text-xs text-gray-500" htmlFor="support-language-select">{t('Language')}</label>
-                    <select id="support-language-select" value={locale} onChange={(e) => void setLocale(e.target.value as typeof locale)} className="mx-3 my-1 w-[calc(100%-1.5rem)] rounded border border-gray-300 px-2 py-1 text-sm">{SUPPORTED_LOCALES.map((supported) => <option key={supported} value={supported}>{LOCALE_LABELS[supported]}</option>)}</select>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => void logout()}
-                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      {t('Log out')}
-                    </button>
+                  <div className="border-b border-line-subtle px-3 py-2 text-12 text-ink-tertiary">
+                    {session.user.email}
                   </div>
-                )}
-              </div>
+                  <label
+                    className="block px-3 pt-2 text-12 text-ink-tertiary"
+                    htmlFor="support-language-select"
+                  >
+                    {t('Language')}
+                  </label>
+                  <Select
+                    id="support-language-select"
+                    value={locale}
+                    onChange={(e) =>
+                      void setLocale(e.target.value as typeof locale)
+                    }
+                    className="mx-3 my-1 w-[calc(100%-1.5rem)] py-1 text-13"
+                  >
+                    {SUPPORTED_LOCALES.map((supported) => (
+                      <option key={supported} value={supported}>
+                        {LOCALE_LABELS[supported]}
+                      </option>
+                    ))}
+                  </Select>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void logout()}
+                    className="block w-full px-3 py-2 text-start text-14 text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
+                  >
+                    {t('Log out')}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
-        <div className="mb-3 sm:mb-4 shrink-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+      <main className="mx-auto flex min-h-0 w-full max-w-content flex-1 flex-col overflow-hidden px-4 py-4 sm:px-5 sm:py-6">
+        <div className="mb-4 shrink-0 sm:mb-5">
+          <h2 className="text-balance text-[28px] font-bold leading-8 text-ink-primary sm:text-[32px] sm:leading-9">
             {t('Support Chat')}
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
+          </h2>
+          <p className="mt-1.25 text-pretty text-14 text-ink-secondary">
             {t('Recommend replies using your company guidelines')}
           </p>
         </div>
 
-        <div className="relative flex-1 flex gap-4 min-h-0 overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 gap-4 overflow-hidden">
           {sidebarOpen && (
             <button
               type="button"
               aria-label={t('Close conversations menu')}
-              className="fixed inset-0 z-40 bg-gray-900/40 md:hidden"
+              className="fixed inset-0 z-40 bg-scrim md:hidden"
               onClick={closeSidebar}
             />
           )}
@@ -736,104 +785,111 @@ export function ChatPage() {
             ref={sidebarRef}
             id="conversations-drawer"
             aria-label={t('Conversations')}
-            className={`fixed inset-y-0 start-0 z-50 w-[min(18rem,88vw)] min-h-0 bg-white shadow-lg flex flex-col transition-transform duration-200 ease-out md:static md:z-auto md:w-72 md:shrink-0 md:translate-x-0 md:shadow md:rounded-lg ${
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-            }`}
+            className={cn(
+              'fixed inset-y-0 start-0 z-50 flex w-[min(18rem,88vw)] min-h-0 flex-col border-e border-line bg-surface-raised transition-transform duration-200 ease-out',
+              'supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]',
+              'md:static md:z-auto md:w-72 md:shrink-0 md:translate-x-0 md:rounded-md md:border md:shadow-overlay',
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+            )}
           >
-            <div className="px-3 pt-3 flex items-center justify-between gap-2 md:hidden">
-              <p className="text-sm font-semibold text-gray-900">{t('Conversations')}</p>
-              <button
-                type="button"
+            <div className="flex items-center justify-between gap-2 border-b border-line-subtle px-3 py-3 md:hidden">
+              <p className="text-14 font-semibold text-ink-primary">
+                {t('Conversations')}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={closeSidebar}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-1"
                 aria-label={t('Close conversations menu')}
               >
                 {t('Close')}
-              </button>
+              </Button>
             </div>
             <div className="px-3 pt-3">
-              <button
+              <Button
                 type="button"
                 onClick={startNewChat}
-                className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                className="w-full"
+                size="sm"
               >
+                <PlusIcon className="size-3.5" />
                 {t('New chat')}
-              </button>
-              <input
+              </Button>
+              <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder={t('Search chats…')}
-                className="mt-3 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                className="mt-3 py-1.5 text-13"
               />
               <div className="mt-2 flex items-center gap-2">
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="flex-1 min-w-0 rounded-md border border-gray-300 px-2 py-1.5 text-sm bg-white focus:border-indigo-500 focus:ring-indigo-500"
-                  >
-                    <option value="">{t('All statuses')}</option>
-                    {ALL_CONVERSATION_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {t(STATUS_LABELS[s])}
-                      </option>
-                    ))}
-                  </select>
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="min-w-0 flex-1 py-1.5 text-13"
+                >
+                  <option value="">{t('All statuses')}</option>
+                  {ALL_CONVERSATION_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {t(STATUS_LABELS[s])}
+                    </option>
+                  ))}
+                </Select>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-xs text-gray-600">
-                <label className="inline-flex items-center gap-1">
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-12 text-ink-secondary">
+                <label className="inline-flex items-center gap-1.5">
                   <input
                     type="checkbox"
                     checked={pinnedOnly}
                     onChange={(e) => setPinnedOnly(e.target.checked)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded-sm border-line text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   />
                   {t('Pinned')}
                 </label>
-                <label className="inline-flex items-center gap-1">
+                <label className="inline-flex items-center gap-1.5">
                   <input
                     type="checkbox"
                     checked={showArchived}
                     onChange={(e) => setShowArchived(e.target.checked)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded-sm border-line text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   />
                   {t('Archived')}
                 </label>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto border-t border-gray-200 min-h-0">
+            <div className="min-h-0 flex-1 overflow-y-auto border-t border-line-subtle">
               {conversations.length === 0 && (
-                <p className="text-sm text-gray-500 text-center py-6 px-3">
-                  {t('No conversations yet.')}
-                </p>
+                <EmptyState
+                  title={t('No conversations yet.')}
+                  className="py-6"
+                />
               )}
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-line-subtle">
                 {conversations.map((c) => (
                   <li key={c.id}>
                     <button
                       type="button"
                       onClick={() => selectConversation(c.id)}
-                      className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${
-                        c.id === activeId ? 'bg-indigo-50' : ''
-                      }`}
+                      className={cn(
+                        'w-full px-3 py-2.5 text-start transition-colors hover:bg-surface-hover',
+                        c.id === activeId && 'bg-accent-muted',
+                      )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-gray-900 truncate">
+                        <span className="truncate text-14 font-medium text-ink-primary">
                           {c.title || t('Untitled chat')}
                         </span>
                         {c.pinned && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-600 shrink-0">
+                          <Badge tone="accent" className="shrink-0 text-[10px]">
                             {t('Pinned')}
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       <div className="mt-1 flex items-center justify-between gap-2">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_BADGES[c.status]}`}
-                        >
-                        {t(STATUS_LABELS[c.status])}
-                        </span>
-                        <span className="text-[10px] text-gray-400 truncate">
+                        <Badge tone={STATUS_BADGE_TONES[c.status]} className="text-[10px]">
+                          {t(STATUS_LABELS[c.status])}
+                        </Badge>
+                        <span className="truncate text-[10px] text-ink-tertiary">
                           {formatDate(c.lastMessageAt ?? c.createdAt)}
                         </span>
                       </div>
@@ -844,45 +900,42 @@ export function ChatPage() {
             </div>
           </aside>
 
-          <div className="flex-1 bg-white shadow rounded-lg flex flex-col min-w-0 min-h-0 w-full">
-            <div className="px-3 sm:px-4 py-3 border-b border-gray-200 shrink-0">
+          <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-md border border-line bg-surface-raised shadow-overlay">
+            <div className="shrink-0 border-b border-line-subtle px-3 py-3 sm:px-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center min-w-0 gap-2">
-                  <button
+                <div className="flex min-w-0 items-center gap-2">
+                  <IconButton
                     ref={menuButtonRef}
-                    type="button"
-                    className="md:hidden inline-flex items-center justify-center rounded-md border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 shrink-0"
-                    aria-label={t('Open conversations menu')}
+                    label={t('Open conversations menu')}
                     aria-expanded={sidebarOpen}
                     aria-controls="conversations-drawer"
+                    className="md:hidden"
                     onClick={openSidebar}
                   >
-                    <span aria-hidden="true" className="block w-4 space-y-1">
-                      <span className="block h-px bg-current" />
-                      <span className="block h-px bg-current" />
-                      <span className="block h-px bg-current" />
-                    </span>
-                  </button>
-                  <div className="bg-indigo-100 rounded-full h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center text-indigo-600 font-semibold shrink-0">
+                    <MenuIcon className="size-4" />
+                  </IconButton>
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-muted text-14 font-semibold text-accent sm:size-10">
                     {companyName.slice(0, 1).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="truncate text-14 font-medium text-ink-primary">
                       {activeConversation?.title || t('New chat')}
                     </p>
-                    <p className="text-xs text-gray-500 truncate">{companyName}</p>
+                    <p className="truncate text-12 text-ink-tertiary">
+                      {companyName}
+                    </p>
                   </div>
                 </div>
                 {activeConversation && (
-                  <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 shrink-0 max-w-[55%]">
-                    <select
+                  <div className="flex max-w-[55%] shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-1">
+                    <Select
                       value={activeConversation.status}
                       onChange={(e) =>
                         void patchConversation(activeConversation.id, {
                           status: e.target.value,
                         })
                       }
-                      className="rounded-md border border-gray-300 px-2 py-1 text-xs bg-white focus:border-indigo-500 focus:ring-indigo-500 max-w-full"
+                      className="max-w-full py-1 text-12"
                     >
                       {!CONVERSATION_STATUSES.includes(
                         activeConversation.status,
@@ -898,36 +951,42 @@ export function ChatPage() {
                             : t(STATUS_LABELS[s])}
                         </option>
                       ))}
-                    </select>
-                    <button
+                    </Select>
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() =>
                         void patchConversation(activeConversation.id, {
                           pinned: !activeConversation.pinned,
                         })
                       }
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                      className="text-12"
                     >
                       {t(activeConversation.pinned ? 'Unpin' : 'Pin')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() =>
                         void patchConversation(activeConversation.id, {
                           archived: !activeConversation.archived,
                         })
                       }
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                      className="text-12"
                     >
                       {t(activeConversation.archived ? 'Unarchive' : 'Archive')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      onClick={() => void onDelete(activeConversation.id)}
-                      className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                      variant="danger-soft"
+                      size="sm"
+                      onClick={() => setDeleteTargetId(activeConversation.id)}
+                      className="text-12"
                     >
                       {t('Delete')}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -939,7 +998,7 @@ export function ChatPage() {
                       role="group"
                       aria-label={t('Rate this conversation')}
                     >
-                      <span className="text-[10px] text-gray-400 mr-1">
+                      <span className="me-1 text-[10px] text-ink-tertiary">
                         {t('Rate')}
                       </span>
                       {[1, 2, 3, 4, 5].map((star) => (
@@ -955,22 +1014,23 @@ export function ChatPage() {
                                 activeConversation.rating === star ? null : star,
                             })
                           }
-                          className={`text-lg leading-none ${
+                          className={cn(
+                            'text-lg leading-none transition-colors',
                             (activeConversation.rating ?? 0) >= star
-                              ? 'text-yellow-500'
-                              : 'text-gray-300 hover:text-yellow-400'
-                          }`}
+                              ? 'text-warning-foreground'
+                              : 'text-ink-tertiary hover:text-warning-foreground',
+                          )}
                         >
                           ★
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <span className="text-[10px] text-gray-400">
+                    <span className="text-[10px] text-ink-tertiary">
                       {t('Rate once the chat is solved / not solved')}
                     </span>
                   )}
-                  <span className="text-[10px] text-gray-400 truncate">
+                  <span className="truncate text-[10px] text-ink-tertiary">
                     {activeConversation.guidelineSnapshotHash
                       ? `${t('Guidance bound')}: ${activeConversation.guidelineSnapshotHash.slice(0, 12)}…`
                       : t('No guidance bound')}
@@ -979,14 +1039,17 @@ export function ChatPage() {
               )}
             </div>
 
-            <div className="flex-1 p-3 sm:p-4 overflow-y-auto min-h-0">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
               <div className="flex flex-col space-y-4">
                 {messages.length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-8">
-                    {activeId
-                      ? t('No messages in this conversation yet.')
-                      : t('Type a question to get started.')}
-                  </p>
+                  <EmptyState
+                    title={
+                      activeId
+                        ? t('No messages in this conversation yet.')
+                        : t('Type a question to get started.')
+                    }
+                    className="py-8"
+                  />
                 )}
                 {messages.map((msg) => {
                   const isAssistant = msg.role === 'assistant';
@@ -1000,59 +1063,65 @@ export function ChatPage() {
                   return (
                     <div key={msg.id} className="flex items-end">
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                        className={cn(
+                          'flex size-8 shrink-0 items-center justify-center rounded-full text-12',
                           isAgent
-                            ? 'bg-amber-200 text-amber-800'
+                            ? 'bg-warning-muted text-warning-foreground'
                             : isAssistant
-                              ? 'bg-emerald-200 text-emerald-800'
-                              : 'bg-indigo-200 text-indigo-700'
-                        }`}
+                              ? 'bg-success-muted text-success-foreground'
+                              : 'bg-accent-muted text-info-foreground',
+                        )}
                       >
                         {label}
                       </div>
-                      <div className="flex flex-col space-y-2 text-sm max-w-[min(36rem,calc(100%-2.5rem))] mx-2 items-start min-w-0">
+                      <div className="mx-2 flex min-w-0 max-w-[min(36rem,calc(100%-2.5rem))] flex-col items-start space-y-2 text-14">
                         {isInFlight(msg.status) ? (
                           <div className="space-y-2">
-                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-100 text-gray-500 italic">
+                            <span className="inline-block rounded-md rounded-bl-none bg-surface-hover px-4 py-2 italic text-ink-tertiary">
                               {t('Thinking…')}
                             </span>
-                            <button
+                            <Button
                               type="button"
+                              variant="ghost"
+                              size="sm"
                               onClick={() => void onStop(msg.id)}
                               disabled={stoppingIds.has(msg.id)}
-                              className="text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-60"
+                              className="text-12"
                             >
                               {stoppingIds.has(msg.id) ? t('Stopping…') : t('Stop')}
-                            </button>
+                            </Button>
                           </div>
                         ) : msg.status === 'failed' ? (
                           <div className="space-y-2">
-                            <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-red-50 text-red-700 break-words">
+                            <span className="inline-block break-words rounded-md rounded-bl-none bg-danger-muted px-4 py-2 text-danger-foreground">
                               {t(ASSISTANT_FAILURE_COPY)}
                             </span>
                             {!viewOnly && (
-                              <button
+                              <Button
                                 type="button"
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => void onRetry(msg.id)}
-                                className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                                className="text-12"
                               >
                                 {t('Retry')}
-                              </button>
+                              </Button>
                             )}
                           </div>
                         ) : msg.status === 'cancelled' ? (
-                          <span className="px-4 py-2 rounded-lg inline-block rounded-bl-none bg-gray-50 text-gray-400 italic">
+                          <span className="inline-block rounded-md rounded-bl-none bg-surface-sunken px-4 py-2 italic text-ink-tertiary">
                             {t('Stopped')}
                           </span>
                         ) : (
                           <span
-                            className={`px-4 py-2 rounded-lg inline-block rounded-bl-none whitespace-pre-wrap break-words ${
+                            className={cn(
+                              'inline-block break-words whitespace-pre-wrap rounded-md rounded-bl-none px-4 py-2',
                               isAgent
-                                ? 'bg-amber-50 text-gray-800'
+                                ? 'bg-warning-muted text-ink-primary'
                                 : isAssistant
-                                  ? 'bg-emerald-50 text-gray-800'
-                                  : 'bg-gray-100 text-gray-700'
-                            }`}
+                                  ? 'bg-success-muted text-ink-primary'
+                                  : 'bg-surface-hover text-ink-primary',
+                            )}
                           >
                             {msg.content}
                           </span>
@@ -1066,36 +1135,42 @@ export function ChatPage() {
             </div>
 
             {error && (
-              <div className="px-4 py-2 text-sm text-red-600 border-t border-red-50 bg-red-50 shrink-0 break-words">
+              <Banner
+                tone="error"
+                className="shrink-0 rounded-none border-x-0 border-b-0"
+              >
                 {error}
-              </div>
+              </Banner>
             )}
 
             {viewOnly && activeConversation && (
-              <div className="px-3 sm:px-4 py-2 text-sm text-amber-800 bg-amber-50 border-t border-amber-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
-                <span>
-                  {t(VIEW_ONLY_COPY[activeConversation.status])}
-                </span>
-                <button
+              <Banner
+                tone="warning"
+                className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-none border-x-0 border-b-0"
+              >
+                <span>{t(VIEW_ONLY_COPY[activeConversation.status])}</span>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() =>
                     void patchConversation(activeConversation.id, {
                       status: 'open',
                     })
                   }
-                  className="text-xs font-semibold text-amber-900 underline hover:no-underline shrink-0"
+                  className="shrink-0 text-12 underline hover:no-underline"
                 >
                   {t('Reopen')}
-                </button>
-              </div>
+                </Button>
+              </Banner>
             )}
 
-            <div className="border-t border-gray-200 px-3 sm:px-4 py-3 shrink-0">
+            <div className="shrink-0 border-t border-line-subtle px-3 py-3 sm:px-4">
               <form
-                className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3"
+                className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3"
                 onSubmit={onSend}
               >
-                <textarea
+                <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -1113,20 +1188,32 @@ export function ChatPage() {
                         ? t('The assistant is thinking — send to redirect it')
                         : t('Type your question… (Shift+Enter for new line)')
                   }
-                  className="rounded-md border border-gray-300 flex-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-gray-900 py-2 px-3 text-sm resize-y min-h-[3rem] max-h-[8rem] disabled:bg-gray-100 disabled:text-gray-400 w-full"
+                  className="min-h-[3rem] max-h-[8rem] w-full flex-1 py-2 text-13"
                 />
-                <button
+                <Button
                   type="submit"
                   disabled={sending || viewOnly || !input.trim()}
-                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shrink-0 w-full sm:w-auto"
+                  className="w-full shrink-0 sm:w-auto"
+                  size="sm"
                 >
                   {sending ? t('Sending…') : t('Send')}
-                </button>
+                </Button>
               </form>
             </div>
           </div>
         </div>
       </main>
+
+      <AlertDialog
+        open={deleteTargetId !== null}
+        title={t('Delete this conversation?')}
+        tone="danger"
+        confirmLabel={t('Delete')}
+        cancelLabel={t('Cancel')}
+        busy={deleting}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </div>
   );
 }

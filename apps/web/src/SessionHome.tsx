@@ -1,3 +1,4 @@
+import { PageHeader, Panel } from '@shared/ui';
 import { useAuth } from './auth';
 import { useLocale } from './locale';
 
@@ -11,41 +12,49 @@ export function SessionHome() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">{t('Home')}</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          {t('Signed in to the AI Support Assistant')}
-        </p>
-      </div>
+      <PageHeader
+        title={t('Home')}
+        description={t('Signed in to the AI Support Assistant')}
+      />
 
-      <div className="bg-white shadow rounded-lg p-6 space-y-6">
+      <Panel className="space-y-6">
         <div>
-          <h2 className="text-sm font-medium text-gray-500">{t('User')}</h2>
-          <p className="mt-1 text-gray-900">{session.user.name}</p>
-          <p className="text-sm text-gray-600">{session.user.email}</p>
-          <p className="mt-1 text-sm text-gray-600 capitalize">
+          <h2 className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+            {t('User')}
+          </h2>
+          <p className="mt-1.25 text-16 text-ink-primary">{session.user.name}</p>
+          <p className="text-14 text-ink-secondary">{session.user.email}</p>
+          <p className="mt-1 text-14 text-ink-secondary capitalize">
             {t('Role')}: {t(session.user.role)}
           </p>
         </div>
 
-        <div>
-          <h2 className="text-sm font-medium text-gray-500">{t('Active company')}</h2>
+        <div className="border-t border-line-subtle pt-5">
+          <h2 className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+            {t('Active company')}
+          </h2>
           {session.activeCompany ? (
-            <p className="mt-1 text-gray-900">{session.activeCompany.name}</p>
-          ) : (
-            <p className="mt-1 text-gray-500">{t('None selected')}</p>
-          )}
-          {session.user.role === 'root' || session.user.role === 'admin' ? (
-            <p className="mt-2 text-xs text-gray-500">
-              {t('Use the company switcher in the header to change tenant context. Open Chat to work in Support under the same session.')}
+            <p className="mt-1.25 text-16 text-ink-primary">
+              {session.activeCompany.name}
             </p>
           ) : (
-            <p className="mt-2 text-xs text-gray-500">
-              {t('Your company is fixed for this account. Open Chat to continue in Support.')}
+            <p className="mt-1.25 text-14 text-ink-tertiary">{t('None selected')}</p>
+          )}
+          {session.user.role === 'root' || session.user.role === 'admin' ? (
+            <p className="mt-2 text-pretty text-13 text-ink-tertiary">
+              {t(
+                'Use the company switcher in the header to change tenant context. Open Chat to work in Support under the same session.',
+              )}
+            </p>
+          ) : (
+            <p className="mt-2 text-pretty text-13 text-ink-tertiary">
+              {t(
+                'Your company is fixed for this account. Open Chat to continue in Support.',
+              )}
             </p>
           )}
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }

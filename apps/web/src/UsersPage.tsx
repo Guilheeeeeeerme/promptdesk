@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import {
+  AlertDialog,
+  Badge,
+  Button,
+  EmptyState,
+  Input,
+  Label,
+  PageHeader,
+  PageSkeleton,
+  Panel,
+  Select,
+} from '@shared/ui';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { useLocale } from './locale';
@@ -69,48 +81,86 @@ function UserForm({ actorRole, user, busy, onCancel, onSubmit }: UserFormProps) 
   }
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} className="rounded-lg bg-white p-4 shadow sm:p-6">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            {user ? t('Edit user') : t('Create user')}
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            {user ? t('Update account details or reset the password.') : t('Add a user to the active company.')}
-          </p>
+    <Panel>
+      <form onSubmit={(event) => void handleSubmit(event)}>
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-16 font-semibold text-ink-primary">
+              {user ? t('Edit user') : t('Create user')}
+            </h2>
+            <p className="mt-1 text-pretty text-14 text-ink-secondary">
+              {user
+                ? t('Update account details or reset the password.')
+                : t('Add a user to the active company.')}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            {t('Cancel')}
+          </Button>
         </div>
-        <button type="button" disabled={busy} onClick={onCancel} className="text-sm font-medium text-gray-500 hover:text-gray-900 disabled:opacity-60">
-          {t('Cancel')}
-        </button>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm font-medium text-gray-700">
-          {t('Name')}
-          <input required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm" />
-        </label>
-        <label className="text-sm font-medium text-gray-700">
-          {t('Email')}
-          <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm" />
-        </label>
-        <label className="text-sm font-medium text-gray-700">
-          {t('Role')}
-          <select value={role} onChange={(event) => setRole(event.target.value as Role)} className="mt-1 block w-full rounded-md border-gray-300 bg-white text-sm shadow-sm">
-            {allowedRoles.map((option) => (
-              <option key={option} value={option} disabled={!assignableRoles.includes(option)}>
-                {roleLabel(option)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-medium text-gray-700">
-          {t(user ? 'Password (optional)' : 'Password')}
-          <input required={!user} minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm" />
-        </label>
-      </div>
-      <button type="submit" disabled={busy} className="mt-5 inline-flex rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
-        {busy ? t('Saving…') : user ? t('Save changes') : t('Create user')}
-      </button>
-    </form>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.25">
+            <Label htmlFor="user-name">{t('Name')}</Label>
+            <Input
+              id="user-name"
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.25">
+            <Label htmlFor="user-email">{t('Email')}</Label>
+            <Input
+              id="user-email"
+              required
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.25">
+            <Label htmlFor="user-role">{t('Role')}</Label>
+            <Select
+              id="user-role"
+              value={role}
+              onChange={(event) => setRole(event.target.value as Role)}
+            >
+              {allowedRoles.map((option) => (
+                <option
+                  key={option}
+                  value={option}
+                  disabled={!assignableRoles.includes(option)}
+                >
+                  {roleLabel(option)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.25">
+            <Label htmlFor="user-password">
+              {t(user ? 'Password (optional)' : 'Password')}
+            </Label>
+            <Input
+              id="user-password"
+              required={!user}
+              minLength={8}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </div>
+        </div>
+        <Button type="submit" disabled={busy} className="mt-5">
+          {busy ? t('Saving…') : user ? t('Save changes') : t('Create user')}
+        </Button>
+      </form>
+    </Panel>
   );
 }
 
@@ -121,11 +171,15 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [editing, setEditing] = useState<UserView | null | undefined>(undefined);
+  const [editing, setEditing] = useState<UserView | null | undefined>(
+    undefined,
+  );
   const [busy, setBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<UserView | null>(null);
 
   const canManage = Boolean(
-    session && ['root', 'admin', 'manager', 'owner'].includes(session.user.role),
+    session &&
+      ['root', 'admin', 'manager', 'owner'].includes(session.user.role),
   );
   const load = useCallback(async () => {
     setError(null);
@@ -134,40 +188,59 @@ export function UsersPage() {
 
   useEffect(() => {
     if (!canManage) return;
-    void load().catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : t('Failed to load users');
-      setError(message);
-      setFeedback({ tone: 'error', message });
-    }).finally(() => setLoading(false));
+    void load()
+      .catch((err: unknown) => {
+        const message =
+          err instanceof Error ? err.message : t('Failed to load users');
+        setError(message);
+        setFeedback({ tone: 'error', message });
+      })
+      .finally(() => setLoading(false));
   }, [canManage, load, t]);
 
   const companyName = session?.activeCompany?.name ?? t('No active company');
   const formUser = editing === undefined ? null : editing;
   const emptyMessage = useMemo(
-    () => session?.user.role === 'manager'
-      ? t('No agent users are assigned to this company.')
-      : t('No users are assigned to this company.'),
+    () =>
+      session?.user.role === 'manager'
+        ? t('No agent users are assigned to this company.')
+        : t('No users are assigned to this company.'),
     [session?.user.role, t],
   );
 
   if (!session || !canManage) return <Navigate to="/" replace />;
-  if (loading) return <p className="text-sm text-gray-600">{t('Loading users…')}</p>;
+  if (loading) return <PageSkeleton />;
 
   async function createOrUpdate(input: CreateUserInput | UpdateUserInput) {
     setBusy(true);
     setError(null);
-    setFeedback({ tone: 'info', message: formUser ? t('Saving user changes…') : t('Creating user…') });
+    setFeedback({
+      tone: 'info',
+      message: formUser ? t('Saving user changes…') : t('Creating user…'),
+    });
     try {
       if (formUser) {
-        await apiFetch<UserView>(`/users/${formUser.id}`, { method: 'PATCH', body: JSON.stringify(input) });
+        await apiFetch<UserView>(`/users/${formUser.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        });
       } else {
-        await apiFetch<UserView>('/users', { method: 'POST', body: JSON.stringify(input) });
+        await apiFetch<UserView>('/users', {
+          method: 'POST',
+          body: JSON.stringify(input),
+        });
       }
       await load();
       setEditing(undefined);
-      setFeedback({ tone: 'success', message: formUser ? t('User changes saved.') : t('User created successfully.') });
+      setFeedback({
+        tone: 'success',
+        message: formUser
+          ? t('User changes saved.')
+          : t('User created successfully.'),
+      });
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('Unable to save user');
+      const message =
+        err instanceof Error ? err.message : t('Unable to save user');
       setError(message);
       setFeedback({ tone: 'error', message });
     } finally {
@@ -175,18 +248,27 @@ export function UsersPage() {
     }
   }
 
-  async function remove(user: UserView) {
-    if (!window.confirm(t('Delete {name}? This cannot be undone.').replace('{name}', user.name))) return;
+  async function confirmRemove() {
+    const user = pendingDelete;
+    if (!user) return;
     setBusy(true);
     setError(null);
-    setFeedback({ tone: 'info', message: t('Deleting {name}…').replace('{name}', user.name) });
+    setFeedback({
+      tone: 'info',
+      message: t('Deleting {name}…').replace('{name}', user.name),
+    });
     try {
       await apiFetch(`/users/${user.id}`, { method: 'DELETE' });
       await load();
       if (formUser?.id === user.id) setEditing(undefined);
-      setFeedback({ tone: 'success', message: t('{name} was deleted.').replace('{name}', user.name) });
+      setFeedback({
+        tone: 'success',
+        message: t('{name} was deleted.').replace('{name}', user.name),
+      });
+      setPendingDelete(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('Unable to delete user');
+      const message =
+        err instanceof Error ? err.message : t('Unable to delete user');
       setError(message);
       setFeedback({ tone: 'error', message });
     } finally {
@@ -196,41 +278,105 @@ export function UsersPage() {
 
   return (
     <div>
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('Users')}</h1>
-          <p className="mt-1 text-sm text-gray-600">{t('Manage users in {company}.').replace('{company}', companyName)}</p>
-        </div>
-        {editing === undefined && (
-          <button type="button" onClick={() => setEditing(null)} className="inline-flex self-start rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-            {t('Add user')}
-          </button>
+      <PageHeader
+        title={t('Users')}
+        description={t('Manage users in {company}.').replace(
+          '{company}',
+          companyName,
         )}
-      </div>
-      <FeedbackBanner
-        feedback={feedback ?? (error ? { tone: 'error', message: error } : null)}
+        actions={
+          editing === undefined ? (
+            <Button type="button" onClick={() => setEditing(null)}>
+              {t('Add user')}
+            </Button>
+          ) : undefined
+        }
       />
-      {editing !== undefined && <div className="mb-6"><UserForm actorRole={session.user.role} user={formUser} busy={busy} onCancel={() => setEditing(undefined)} onSubmit={createOrUpdate} /></div>}
-      <div className="overflow-hidden rounded-lg bg-white shadow">
-        {users.length === 0 ? <p className="px-4 py-10 text-center text-sm text-gray-500">{emptyMessage}</p> : (
-          <div className="divide-y divide-gray-200">
+      <FeedbackBanner
+        feedback={
+          feedback ?? (error ? { tone: 'error', message: error } : null)
+        }
+      />
+      {editing !== undefined && (
+        <div className="mb-5">
+          <UserForm
+            actorRole={session.user.role}
+            user={formUser}
+            busy={busy}
+            onCancel={() => setEditing(undefined)}
+            onSubmit={createOrUpdate}
+          />
+        </div>
+      )}
+      <Panel padded={false}>
+        {users.length === 0 ? (
+          <EmptyState title={emptyMessage} />
+        ) : (
+          <div className="divide-y divide-line-subtle">
             {users.map((user) => (
-              <div key={user.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div
+                key={user.id}
+                className="flex flex-col gap-3 px-4 py-4 hover:bg-surface-hover sm:flex-row sm:items-center sm:justify-between sm:px-5"
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">{user.name}</p>
-                  <p className="truncate text-sm text-gray-500">{user.email}</p>
-                  <p className="mt-1 text-xs text-gray-400">{t('Joined {date}').replace('{date}', formatDate(user.createdAt))}</p>
+                  <p className="truncate text-14 font-semibold text-ink-primary">
+                    {user.name}
+                  </p>
+                  <p className="truncate text-14 text-ink-secondary">
+                    {user.email}
+                  </p>
+                  <p className="mt-1 text-12 text-ink-tertiary">
+                    {t('Joined {date}').replace(
+                      '{date}',
+                      formatDate(user.createdAt),
+                    )}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">{roleLabel(user.role)}</span>
-                  <button type="button" disabled={busy} onClick={() => setEditing(user)} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60">{t('Edit')}</button>
-                  <button type="button" disabled={busy} onClick={() => void remove(user)} className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60">{t('Delete')}</button>
+                  <Badge tone="accent">{roleLabel(user.role)}</Badge>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setEditing(user)}
+                  >
+                    {t('Edit')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger-soft"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setPendingDelete(user)}
+                  >
+                    {t('Delete')}
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </Panel>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        title={t('Delete user')}
+        description={
+          pendingDelete
+            ? t('Delete {name}? This cannot be undone.').replace(
+                '{name}',
+                pendingDelete.name,
+              )
+            : undefined
+        }
+        confirmLabel={t('Delete')}
+        cancelLabel={t('Cancel')}
+        tone="danger"
+        busy={busy}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void confirmRemove()}
+      />
     </div>
   );
 }

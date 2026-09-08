@@ -6,6 +6,18 @@ import {
   type FormEvent,
 } from 'react';
 import { isPlatformRole } from '@shared/auth';
+import {
+  Badge,
+  Button,
+  cn,
+  EmptyState,
+  Input,
+  Label,
+  PageHeader,
+  Panel,
+  Select,
+  Textarea,
+} from '@shared/ui';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { useLocale } from './locale';
@@ -95,26 +107,22 @@ function humanizeSeconds(seconds: number): string {
 function messageIdentity(role: string, translate: (v: string) => string): {
   label: string;
   bubbleClass: string;
-  avatarClass: string;
 } {
   if (role === 'agent') {
     return {
       label: translate('Support (human)'),
-      bubbleClass: 'bg-amber-50 text-gray-800',
-      avatarClass: 'bg-amber-200 text-amber-800',
+      bubbleClass: 'bg-warning-muted text-ink-primary',
     };
   }
   if (role === 'assistant') {
     return {
       label: translate('AI'),
-      bubbleClass: 'bg-indigo-50 text-gray-900',
-      avatarClass: 'bg-indigo-200 text-indigo-700',
+      bubbleClass: 'bg-accent-muted text-ink-primary',
     };
   }
   return {
     label: translate('Customer'),
-    bubbleClass: 'bg-gray-50 text-gray-900',
-    avatarClass: 'bg-gray-200 text-gray-600',
+    bubbleClass: 'bg-surface-sunken text-ink-primary',
   };
 }
 
@@ -358,79 +366,83 @@ export function HistoryPage() {
 
   return (
     <div className="min-w-0">
-      <div className="mb-6 sm:mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-            {t('Chat History')}
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            {t('Browse previous support interactions for {company}').replace('{company}', companyName)}
-          </p>
-        </div>
-        <div
-          className={`w-full sm:w-72 ${showMobileDetail ? 'hidden lg:block' : ''}`}
-        >
-          <label htmlFor="history-search" className="sr-only">
-            {t('Search history')}
-          </label>
-          <input
-            id="history-search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={t('Search messages or titles…')}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-          />
-        </div>
-      </div>
+      <PageHeader
+        title={t('Chat History')}
+        description={t('Browse previous support interactions for {company}').replace(
+          '{company}',
+          companyName,
+        )}
+        actions={
+          <div
+            className={cn(
+              'w-full sm:w-72',
+              showMobileDetail && 'hidden lg:block',
+            )}
+          >
+            <label htmlFor="history-search" className="sr-only">
+              {t('Search history')}
+            </label>
+            <Input
+              id="history-search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={t('Search messages or titles…')}
+            />
+          </div>
+        }
+      />
 
       {isPlatform && summary && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="bg-white shadow rounded-lg px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Panel>
+            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
               {t('Threads · {n}d').replace('{n}', String(summary.windowDays))}
             </p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">
+            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
               {summary.total}
             </p>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="mt-0.5 text-12 text-ink-tertiary">
               {t('Still open: {n}').replace('{n}', String(summary.open))}
             </p>
-          </div>
-          <div className="bg-white shadow rounded-lg px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          </Panel>
+          <Panel>
+            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
               {t('Resolution rate')}
             </p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">
+            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
               {summary.resolutionRate != null ? `${summary.resolutionRate}%` : '—'}
             </p>
-            <p className="mt-0.5 text-xs text-gray-500">
-              {t("{solved} solved · {not} not solved · {wont} won't solve").replace('{solved}', String(summary.solved)).replace('{not}', String(summary.notSolved)).replace('{wont}', String(summary.wontSolve))}
+            <p className="mt-0.5 text-12 text-ink-tertiary">
+              {t("{solved} solved · {not} not solved · {wont} won't solve")
+                .replace('{solved}', String(summary.solved))
+                .replace('{not}', String(summary.notSolved))
+                .replace('{wont}', String(summary.wontSolve))}
             </p>
-          </div>
-          <div className="bg-white shadow rounded-lg px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          </Panel>
+          <Panel>
+            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
               {t('Avg time to resolve')}
             </p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">
+            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
               {summary.avgResolveSeconds != null
                 ? humanizeSeconds(summary.avgResolveSeconds)
                 : '—'}
             </p>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="mt-0.5 text-12 text-ink-tertiary">
               {t('first finish → open timestamp')}
             </p>
-          </div>
-          <div className="bg-white shadow rounded-lg px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          </Panel>
+          <Panel>
+            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
               {t('Rating average')}
             </p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">
+            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
               {summary.avgRating != null ? `${summary.avgRating} / 5` : '—'}
             </p>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="mt-0.5 text-12 text-ink-tertiary">
               {t('{n} conversations rated').replace('{n}', String(summary.ratedCount))}
             </p>
-          </div>
+          </Panel>
         </div>
       )}
 
@@ -439,22 +451,26 @@ export function HistoryPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section
-          className={`bg-white shadow rounded-lg overflow-hidden min-w-0 ${
-            showMobileDetail ? 'hidden lg:block' : ''
-          }`}
+        <Panel
+          padded={false}
+          className={cn(
+            'min-w-0 overflow-hidden',
+            showMobileDetail && 'hidden lg:block',
+          )}
         >
-          <div className="border-b border-gray-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-gray-900">{t('Conversations')}</h2>
+          <div className="border-b border-line-subtle px-4 py-3">
+            <h2 className="text-14 font-semibold text-ink-primary">
+              {t('Conversations')}
+            </h2>
           </div>
           {loading ? (
-            <p className="px-4 py-8 text-sm text-gray-500">{t('Loading history…')}</p>
-          ) : items.length === 0 ? (
-            <p className="px-4 py-8 text-sm text-gray-500">
-              {t('No conversations for this company yet.')}
+            <p className="px-4 py-8 text-14 text-ink-tertiary">
+              {t('Loading history…')}
             </p>
+          ) : items.length === 0 ? (
+            <EmptyState title={t('No conversations for this company yet.')} />
           ) : (
-            <ul className="divide-y divide-gray-100 max-h-[min(32rem,70dvh)] overflow-y-auto">
+            <ul className="max-h-[min(32rem,70dvh)] divide-y divide-line-subtle overflow-y-auto">
               {items.map((item) => {
                 const active = item.id === activeSelectedId;
                 return (
@@ -462,23 +478,26 @@ export function HistoryPage() {
                     <button
                       type="button"
                       onClick={() => selectConversation(item.id)}
-                      className={`w-full text-left px-4 py-3 hover:bg-gray-50 focus:outline-none focus:bg-indigo-50 ${
-                        active ? 'bg-indigo-50' : ''
-                      }`}
+                      className={cn(
+                        'w-full px-4 py-3 text-left transition-colors duration-150',
+                        'hover:bg-surface-hover',
+                        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                        active && 'bg-accent-muted',
+                      )}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
+                          <p className="truncate text-14 font-medium text-ink-primary">
                             {item.title?.trim() || t('Untitled chat')}
                           </p>
-                          <p className="mt-1 text-xs text-gray-500 truncate">
+                          <p className="mt-1 truncate text-12 text-ink-secondary">
                             {isPlatform && item.ownerName
                               ? `${item.ownerName} · `
                               : ''}
                             {companyName} · {t(statusLabel(item.status))}
                           </p>
                         </div>
-                        <time className="shrink-0 text-xs text-gray-400">
+                        <time className="shrink-0 text-12 text-ink-tertiary tabular-nums">
                           {formatWhen(item.lastMessageAt ?? item.createdAt)}
                         </time>
                       </div>
@@ -488,48 +507,59 @@ export function HistoryPage() {
               })}
             </ul>
           )}
-        </section>
+        </Panel>
 
-        <section
-          className={`bg-white shadow rounded-lg overflow-hidden min-w-0 ${
-            showMobileDetail ? '' : 'hidden lg:block'
-          }`}
+        <Panel
+          padded={false}
+          className={cn(
+            'min-w-0 overflow-hidden',
+            !showMobileDetail && 'hidden lg:block',
+          )}
         >
-          <div className="border-b border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-gray-900">{t('Detail')}</h2>
+          <div className="flex items-center justify-between gap-3 border-b border-line-subtle px-4 py-3">
+            <h2 className="text-14 font-semibold text-ink-primary">
+              {t('Detail')}
+            </h2>
             {showMobileDetail && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={clearSelection}
-                className="lg:hidden text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                className="lg:hidden"
               >
                 {t('Back to list')}
-              </button>
+              </Button>
             )}
           </div>
           {!activeSelectedId ? (
-            <p className="px-4 py-8 text-sm text-gray-500">
-              {t('Select a conversation to view the full transcript.')}
-            </p>
+            <EmptyState
+              title={t('Select a conversation to view the full transcript.')}
+            />
           ) : detailLoading ? (
-            <p className="px-4 py-8 text-sm text-gray-500">{t('Loading detail…')}</p>
+            <p className="px-4 py-8 text-14 text-ink-tertiary">
+              {t('Loading detail…')}
+            </p>
           ) : detailError ? (
-            <p role="alert" className="px-4 py-8 text-sm text-red-600 break-words">
+            <p
+              role="alert"
+              className="break-words px-4 py-8 text-14 text-danger-foreground"
+            >
               {detailError}
             </p>
           ) : detail ? (
-            <div className="px-4 py-4 space-y-4">
-              <div className="space-y-1 text-sm">
+            <div className="space-y-4 px-4 py-4">
+              <div className="space-y-1.25 text-14">
                 <p>
-                  <span className="text-gray-500">{t('Title:')}</span>{' '}
-                  <span className="text-gray-900 break-words">
+                  <span className="text-ink-secondary">{t('Title:')}</span>{' '}
+                  <span className="break-words text-ink-primary">
                     {detail.title?.trim() || t('Untitled chat')}
                   </span>
                 </p>
                 {isPlatform && (detail.ownerName || detail.ownerEmail) && (
                   <p>
-                    <span className="text-gray-500">{t('Agent:')}</span>{' '}
-                    <span className="text-gray-900 break-words">
+                    <span className="text-ink-secondary">{t('Agent:')}</span>{' '}
+                    <span className="break-words text-ink-primary">
                       {[detail.ownerName, detail.ownerEmail]
                         .filter(Boolean)
                         .join(' · ')}
@@ -537,13 +567,13 @@ export function HistoryPage() {
                   </p>
                 )}
                 <p>
-                  <span className="text-gray-500">{t('Company:')}</span>{' '}
-                  <span className="text-gray-900">{companyName}</span>
+                  <span className="text-ink-secondary">{t('Company:')}</span>{' '}
+                  <span className="text-ink-primary">{companyName}</span>
                 </p>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-500">{t('Status:')}</span>
+                  <span className="text-ink-secondary">{t('Status:')}</span>
                   {isPlatform ? (
-                    <select
+                    <Select
                       value={detail.status}
                       disabled={updatingConversationId === detail.id}
                       onChange={(e) =>
@@ -551,7 +581,7 @@ export function HistoryPage() {
                           status: e.target.value,
                         })
                       }
-                      className="rounded-md border border-gray-300 px-2 py-0.5 text-xs bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+                      className="h-auto w-auto py-0.5 text-12"
                     >
                       {!PLATFORM_STATUSES.includes(detail.status) && (
                         <option value={detail.status} disabled>
@@ -563,55 +593,60 @@ export function HistoryPage() {
                           {statusLabel(s)}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   ) : (
-                    <span className="text-gray-900">{statusLabel(detail.status)}</span>
+                    <Badge tone="neutral">{statusLabel(detail.status)}</Badge>
                   )}
                 </div>
                 <p>
-                  <span className="text-gray-500">{t('Rating:')}</span>{' '}
+                  <span className="text-ink-secondary">{t('Rating:')}</span>{' '}
                   {isFinal(detail.status) ? (
-                    <span className="text-gray-900">
+                    <span className="text-ink-primary">
                       {detail.rating
                         ? `${'★'.repeat(detail.rating)}${'☆'.repeat(5 - detail.rating)} (${detail.rating}/5)`
                         : t('Not rated yet')}
                     </span>
                   ) : (
-                    <span className="text-gray-400">
+                    <span className="text-ink-tertiary">
                       {t('available once finished')}
                     </span>
                   )}
                 </p>
                 <p>
-                  <span className="text-gray-500">{t('Last activity:')}</span>{' '}
-                  <span className="text-gray-900">
+                  <span className="text-ink-secondary">{t('Last activity:')}</span>{' '}
+                  <span className="text-ink-primary tabular-nums">
                     {formatWhen(detail.lastMessageAt ?? detail.createdAt)}
                   </span>
                 </p>
                 {detail.guidelineSnapshotHash && (
                   <p className="break-all">
-                    <span className="text-gray-500">{t('Guideline snapshot:')}</span>{' '}
-                    <span className="font-mono text-xs text-gray-700">
+                    <span className="text-ink-secondary">
+                      {t('Guideline snapshot:')}
+                    </span>{' '}
+                    <span className="font-mono text-12 text-ink-secondary">
                       {detail.guidelineSnapshotHash.slice(0, 16)}…
                     </span>
                   </p>
                 )}
               </div>
 
-              <div className="border-t border-gray-100 pt-4 space-y-3 max-h-[min(24rem,55dvh)] overflow-y-auto">
+              <div className="max-h-[min(24rem,55dvh)] space-y-3 overflow-y-auto border-t border-line-subtle pt-4">
                 {messages.length === 0 ? (
-                  <p className="text-sm text-gray-500">{t('No messages.')}</p>
+                  <p className="text-14 text-ink-tertiary">{t('No messages.')}</p>
                 ) : (
                   messages.map((msg) => {
                     const identity = messageIdentity(msg.role, t);
                     return (
                       <article
                         key={msg.id}
-                        className={`rounded-md px-3 py-2 text-sm whitespace-pre-wrap break-words ${identity.bubbleClass}`}
+                        className={cn(
+                          'whitespace-pre-wrap break-words rounded-md px-3 py-2 text-14',
+                          identity.bubbleClass,
+                        )}
                       >
-                        <header className="mb-1 flex items-center justify-between gap-2 text-xs text-gray-500">
+                        <header className="mb-1 flex items-center justify-between gap-2 text-12 text-ink-tertiary">
                           <span className="font-medium">{identity.label}</span>
-                          <time className="shrink-0">
+                          <time className="shrink-0 tabular-nums">
                             {formatWhen(msg.createdAt)}
                           </time>
                         </header>
@@ -623,23 +658,17 @@ export function HistoryPage() {
               </div>
 
               {isPlatform && (
-                <div className="border-t border-gray-100 pt-4">
+                <div className="border-t border-line-subtle pt-4">
                   {isFinal(detail.status) ? (
-                    <p className="text-xs text-gray-400">
+                    <p className="text-12 text-ink-tertiary">
                       {t('Reopen the conversation to reply manually.')}
                     </p>
                   ) : (
-                    <form
-                      className="flex flex-col gap-2"
-                      onSubmit={sendReply}
-                    >
-                      <label
-                        htmlFor="manual-reply"
-                        className="text-xs font-medium text-gray-500"
-                      >
+                    <form className="flex flex-col gap-2" onSubmit={sendReply}>
+                      <Label htmlFor="manual-reply">
                         {t("Reply as support human (visible to the agent's chat)")}
-                      </label>
-                      <textarea
+                      </Label>
+                      <Textarea
                         id="manual-reply"
                         value={reply}
                         onChange={(e) => setReply(e.target.value)}
@@ -650,23 +679,26 @@ export function HistoryPage() {
                           }
                         }}
                         rows={2}
-                        placeholder={t('Type a manual reply… (Shift+Enter for new line)')}
-                        className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 resize-y min-h-[2.5rem] max-h-[8rem] w-full"
+                        placeholder={t(
+                          'Type a manual reply… (Shift+Enter for new line)',
+                        )}
+                        className="min-h-[2.5rem] max-h-[8rem]"
                       />
-                      <button
+                      <Button
                         type="submit"
+                        size="sm"
                         disabled={sendingReply || !reply.trim()}
-                        className="self-start inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                        className="self-start"
                       >
                         {sendingReply ? t('Sending…') : t('Send reply')}
-                      </button>
+                      </Button>
                     </form>
                   )}
                 </div>
               )}
             </div>
           ) : null}
-        </section>
+        </Panel>
       </div>
     </div>
   );
