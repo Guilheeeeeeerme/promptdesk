@@ -1,9 +1,11 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { JsonLogger } from './json-logger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new JsonLogger();
+  const app = await NestFactory.create(AppModule, { logger });
 
   const corsOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
   app.enableCors({
@@ -21,7 +23,7 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  console.log(`API listening on port ${port}`);
+  logger.log(`API listening on port ${port}`, 'Bootstrap');
 }
 
 bootstrap();
