@@ -21,13 +21,13 @@
     "prisma:generate": "prisma generate && prisma generate --schema prisma-chat/schema.prisma",
     "prisma:migrate": "prisma migrate deploy && prisma migrate deploy --schema prisma-chat/schema.prisma",
     "prisma:seed": "prisma db seed",
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
-    "seed:platform": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-platform.ts",
-    "seed:demo": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-demo.ts",
+    "seed": "TS_NODE_COMPILER_OPTIONS={\"module\":\"CommonJS\"} ts-node prisma/seed.ts",
+    "seed:platform": "TS_NODE_COMPILER_OPTIONS={\"module\":\"CommonJS\"} ts-node prisma/seed-platform.ts",
+    "seed:demo": "TS_NODE_COMPILER_OPTIONS={\"module\":\"CommonJS\"} ts-node prisma/seed-demo.ts",
     "backfill:conversations": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/backfill-conversations.ts"
   },
   "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "seed": "TS_NODE_COMPILER_OPTIONS={\"module\":\"CommonJS\"} ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^12.0.0",
