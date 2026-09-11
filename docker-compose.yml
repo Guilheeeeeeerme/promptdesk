@@ -61,6 +61,11 @@ services:
       PORT: ${PORT:-3000}
       CHAT_JOB_ATTEMPTS: ${CHAT_JOB_ATTEMPTS:-3}
       CHAT_RATE_LIMIT_PER_MINUTE: ${CHAT_RATE_LIMIT_PER_MINUTE:-20}
+      SEED_DEMO: ${SEED_DEMO:-1}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-Password123!}
+      DEV_ROOT_EMAIL: ${DEV_ROOT_EMAIL:-root@example.com}
+      DEV_ROOT_PASSWORD: ${DEV_ROOT_PASSWORD:-Password123!}
+      NODE_ENV: ${NODE_ENV:-development}
     ports:
       - "${PORT:-3000}:3000"
     volumes:
