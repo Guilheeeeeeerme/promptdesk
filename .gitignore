@@ -130,3 +130,17 @@ apps/chat-worker/*.tsbuildinfo
 
 .serena/
 .playwright-mcp/
+
+# ---- AI / agent tooling state ----
+.agents/
+.aider*
+.claude/
+.codex/
+.cursor/
+.devin/
+.playwright-mcp/
+.serena/
+.superpowers/
+.tokensave/
+.windsurf/
+skills-lock.json
