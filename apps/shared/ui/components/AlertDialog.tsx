@@ -70,12 +70,12 @@ export function AlertDialog({
         {description ? (
           <div
             id={descriptionId}
-            className="mt-2 text-pretty text-14 text-ink-secondary"
+            className="mt-1.25 text-pretty text-17 font-normal text-ink-secondary"
           >
             {description}
           </div>
         ) : null}
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex justify-end gap-1.25">
           <Button
             ref={cancelRef}
             variant="secondary"

@@ -21,7 +21,7 @@ export function EmptyState({
     >
       <p className="text-balance text-15 font-medium text-ink-primary">{title}</p>
       {description ? (
-        <p className="mt-1.25 max-w-sm text-pretty text-13 text-ink-secondary">
+        <p className="mt-1.25 max-w-sm text-pretty text-17 font-normal text-ink-secondary">
           {description}
         </p>
       ) : null}

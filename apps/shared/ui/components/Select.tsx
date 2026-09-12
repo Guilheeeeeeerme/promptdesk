@@ -11,7 +11,7 @@ export function Select({ className, style, children, ...props }: SelectProps) {
   return (
     <select
       className={cn(
-        'block w-full appearance-none rounded-sm border border-line bg-surface-raised bg-[length:var(--icon-size)_var(--icon-size)] bg-[position:right_0.625rem_center] bg-no-repeat py-2 pe-9 ps-3 text-14 text-ink-primary',
+        'block w-full appearance-none rounded-sm border border-line bg-surface-raised bg-[length:var(--icon-size)_var(--icon-size)] bg-[position:right_0.625rem_center] bg-no-repeat py-2 pe-9 ps-3 text-17 font-normal text-ink-primary',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,

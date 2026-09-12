@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="dark" />
     <title>Support Chat — PromptDesk</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,20 +13,10 @@
       rel="stylesheet"
     />
     <script>
-      (function () {
-        try {
-          var stored = localStorage.getItem('promptdesk-theme');
-          var theme = stored === 'light' || stored === 'dark' ? stored : null;
-          if (!theme) {
-            theme = window.matchMedia('(prefers-color-scheme: light)').matches
-              ? 'light'
-              : 'dark';
-          }
-          document.documentElement.dataset.theme = theme;
-        } catch (e) {
-          document.documentElement.dataset.theme = 'dark';
-        }
-      })();
+      document.documentElement.dataset.theme = 'dark';
+      try {
+        localStorage.setItem('promptdesk-theme', 'dark');
+      } catch (e) {}
     </script>
   </head>
   <body>

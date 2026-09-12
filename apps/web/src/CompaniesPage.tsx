@@ -421,7 +421,7 @@ export function CompaniesPage() {
                       <div className="flex min-w-0 items-center">
                         <div
                           className={cn(
-                            'flex size-12 shrink-0 items-center justify-center rounded-full',
+                            'flex size-12 shrink-0 items-center justify-center rounded-md',
                             accent.bg,
                           )}
                         >
@@ -683,7 +683,7 @@ export function CompaniesPage() {
                               : 'hover:bg-surface-hover',
                           )}
                         >
-                          <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="flex flex-wrap items-center gap-1.25">
                             <span className="text-13 font-medium text-ink-primary">
                               {historyLoadingId === version.id
                                 ? t('Loading…')

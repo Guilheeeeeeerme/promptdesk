@@ -395,24 +395,24 @@ export function HistoryPage() {
       {isPlatform && summary && (
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Panel>
-            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+            <p className="text-12 font-medium uppercase text-ink-tertiary">
               {t('Threads · {n}d').replace('{n}', String(summary.windowDays))}
             </p>
-            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
+            <p className="mt-1.25 text-16 font-bold text-ink-primary tabular-nums">
               {summary.total}
             </p>
-            <p className="mt-0.5 text-12 text-ink-tertiary">
+            <p className="mt-1.25 text-12 text-ink-tertiary">
               {t('Still open: {n}').replace('{n}', String(summary.open))}
             </p>
           </Panel>
           <Panel>
-            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+            <p className="text-12 font-medium uppercase text-ink-tertiary">
               {t('Resolution rate')}
             </p>
-            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
+            <p className="mt-1.25 text-16 font-bold text-ink-primary tabular-nums">
               {summary.resolutionRate != null ? `${summary.resolutionRate}%` : '—'}
             </p>
-            <p className="mt-0.5 text-12 text-ink-tertiary">
+            <p className="mt-1.25 text-12 text-ink-tertiary">
               {t("{solved} solved · {not} not solved · {wont} won't solve")
                 .replace('{solved}', String(summary.solved))
                 .replace('{not}', String(summary.notSolved))
@@ -420,26 +420,26 @@ export function HistoryPage() {
             </p>
           </Panel>
           <Panel>
-            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+            <p className="text-12 font-medium uppercase text-ink-tertiary">
               {t('Avg time to resolve')}
             </p>
-            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
+            <p className="mt-1.25 text-16 font-bold text-ink-primary tabular-nums">
               {summary.avgResolveSeconds != null
                 ? humanizeSeconds(summary.avgResolveSeconds)
                 : '—'}
             </p>
-            <p className="mt-0.5 text-12 text-ink-tertiary">
+            <p className="mt-1.25 text-12 text-ink-tertiary">
               {t('first finish → open timestamp')}
             </p>
           </Panel>
           <Panel>
-            <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+            <p className="text-12 font-medium uppercase text-ink-tertiary">
               {t('Rating average')}
             </p>
-            <p className="mt-1.25 text-[28px] font-bold leading-8 text-ink-primary tabular-nums">
+            <p className="mt-1.25 text-16 font-bold text-ink-primary tabular-nums">
               {summary.avgRating != null ? `${summary.avgRating} / 5` : '—'}
             </p>
-            <p className="mt-0.5 text-12 text-ink-tertiary">
+            <p className="mt-1.25 text-12 text-ink-tertiary">
               {t('{n} conversations rated').replace('{n}', String(summary.ratedCount))}
             </p>
           </Panel>
@@ -581,7 +581,7 @@ export function HistoryPage() {
                           status: e.target.value,
                         })
                       }
-                      className="h-auto w-auto py-0.5 text-12"
+                      className="h-auto w-auto py-1.25 text-12"
                     >
                       {!PLATFORM_STATUSES.includes(detail.status) && (
                         <option value={detail.status} disabled>

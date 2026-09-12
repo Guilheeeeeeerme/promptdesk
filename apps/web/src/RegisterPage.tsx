@@ -8,7 +8,7 @@ import {
   setToken,
   type LoginResponse,
 } from '@shared/auth';
-import { Banner, Button, Input, Label, Panel, ThemeToggle } from '@shared/ui';
+import { Banner, Button, Input, Label, Panel } from '@shared/ui';
 import { apiFetch, getAllowedReturnOrigins } from './api';
 import { useLocale } from './locale';
 
@@ -68,18 +68,14 @@ export function RegisterPage() {
 
   return (
     <div className="relative flex min-h-dvh flex-col justify-center overflow-x-hidden bg-surface-base px-4 py-12 sm:px-6 lg:px-8">
-      <div className="absolute end-4 top-4">
-        <ThemeToggle labelDark={t('Dark mode')} labelLight={t('Light mode')} />
-      </div>
-
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <p className="text-center text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+        <p className="text-center text-12 font-medium uppercase text-ink-tertiary">
           PromptDesk
         </p>
-        <h1 className="mt-2 text-balance text-center text-[32px] font-bold leading-9 text-ink-primary">
+        <h1 className="mt-1.25 text-balance text-center text-display text-ink-primary">
           {t('AI Support Assistant')}
         </h1>
-        <p className="mt-2 text-pretty text-center text-14 text-ink-secondary">
+        <p className="mt-1.25 text-pretty text-center text-17 font-normal text-ink-secondary">
           {t('Create your company account to get started')}
         </p>
       </div>

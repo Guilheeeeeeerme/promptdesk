@@ -12,6 +12,7 @@
     min-height: 100dvh;
     font-family: var(--font-sans);
     font-size: 17px;
+    font-weight: 400;
     line-height: 26px;
     background: var(--surface-base);
     color: var(--text-primary);
@@ -47,6 +48,16 @@
     background-color: var(--border-default);
     border-radius: 8px;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer utilities {
@@ -56,5 +67,12 @@
 
   .text-pretty {
     text-wrap: pretty;
+  }
+
+  .safe-area-inset {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
   }
 }
