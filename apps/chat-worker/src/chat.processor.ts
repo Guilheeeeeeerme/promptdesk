@@ -27,6 +27,7 @@ import { boundPromptContext } from './prompt-budget';
 import { resolveGuidelineContext } from './guideline-context';
 import { resolveProviderOrder } from './provider-policy';
 import { LlmBudgetExceededError, LlmBudgetService } from './llm-budget';
+import { screenModelOutput } from './output-policy';
 
 @Processor(CHAT_GENERATE_QUEUE)
 export class ChatGenerateProcessor extends WorkerHost {
@@ -254,6 +255,11 @@ export class ChatGenerateProcessor extends WorkerHost {
           : await this.gemini.generateReply(genParams);
 
       const reply = applyPlaceholders(rawReply, placeholders);
+
+      // Model output is untrusted input: an agent may paste this reply to a
+      // customer, so refuse to persist or publish an exfiltration payload
+      // (OWASP LLM10). Screening after substitution covers injected values.
+      screenModelOutput(reply);
 
       // Critical: do not write completed content if stopped during the LLM call.
       await this.assertNotAborted(assistantMessageId);
