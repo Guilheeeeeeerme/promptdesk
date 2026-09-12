@@ -18,7 +18,6 @@ import {
   IconButton,
   MenuIcon,
   Select,
-  ThemeToggle,
   cn,
 } from '@shared/ui';
 import { getToken, SUPPORT_ORIGIN } from './api';
@@ -173,7 +172,7 @@ export function AppShell() {
     <div className="flex min-h-dvh overflow-x-hidden bg-surface-base">
       <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-52 md:shrink-0 md:flex-col md:border-e md:border-line">
         <div className="border-b border-line-subtle px-4 py-5">
-          <p className="text-12 font-medium uppercase tracking-wide text-ink-tertiary">
+          <p className="text-12 font-medium uppercase text-ink-tertiary">
             PromptDesk
           </p>
           <h1 className="mt-1 text-balance text-15 font-semibold text-ink-primary">
@@ -257,10 +256,6 @@ export function AppShell() {
                 {t('Chat')}
                 <ExternalLinkIcon className="size-3.5 shrink-0" />
               </a>
-              <ThemeToggle
-                labelDark={t('Dark mode')}
-                labelLight={t('Light mode')}
-              />
               <div className="relative" ref={userMenuRef}>
                 <Button
                   ref={userMenuButtonRef}
@@ -368,7 +363,7 @@ export function AppShell() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={openSupport}
-              className="flex items-center gap-1.5 rounded-sm px-3 py-2 text-14 font-medium text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
+              className="flex items-center gap-1.25 rounded-sm px-3 py-2 text-14 font-medium text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
               aria-label={t('Chat (opens in new tab)')}
             >
               {t('Chat')}

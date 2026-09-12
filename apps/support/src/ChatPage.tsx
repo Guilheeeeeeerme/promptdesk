@@ -13,7 +13,6 @@ import {
   PlusIcon,
   Select,
   Textarea,
-  ThemeToggle,
 } from '@shared/ui';
 import { LOCALE_LABELS, SUPPORTED_LOCALES } from '@shared/auth';
 import { apiFetch, getApiOrigin, getSocketPath, getToken } from './api';
@@ -701,7 +700,7 @@ export function ChatPage() {
       <header className="sticky top-0 z-40 border-b border-line bg-surface-base supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex h-[var(--header-height)] max-w-content items-center justify-between gap-3 px-4 sm:px-5 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <p className="hidden text-12 font-medium uppercase tracking-wide text-ink-tertiary sm:block">
+            <p className="hidden text-12 font-medium uppercase text-ink-tertiary sm:block">
               PromptDesk
             </p>
             <h1 className="truncate text-15 font-semibold text-ink-primary">
@@ -711,11 +710,7 @@ export function ChatPage() {
               {t('Chat')}
             </span>
           </div>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            <ThemeToggle
-              labelDark={t('Dark mode')}
-              labelLight={t('Light mode')}
-            />
+          <div className="flex shrink-0 items-center gap-1 sm:gap-1.25">
             <div className="relative" ref={userMenuRef}>
               <Button
                 ref={userMenuButtonRef}
@@ -780,10 +775,10 @@ export function ChatPage() {
 
       <main className="mx-auto flex min-h-0 w-full max-w-content flex-1 flex-col overflow-hidden px-4 py-4 sm:px-5 sm:py-6">
         <div className="mb-4 shrink-0 sm:mb-5">
-          <h2 className="text-balance text-[28px] font-bold leading-8 text-ink-primary sm:text-[32px] sm:leading-9">
+          <h2 className="text-balance text-display text-ink-primary">
             {t('Support Chat')}
           </h2>
-          <p className="mt-1.25 text-pretty text-14 text-ink-secondary">
+          <p className="mt-1.25 text-pretty text-17 font-normal text-ink-secondary">
             {t('Recommend replies using your company guidelines')}
           </p>
         </div>
@@ -897,16 +892,16 @@ export function ChatPage() {
                           {c.title || t('Untitled chat')}
                         </span>
                         {c.pinned && (
-                          <Badge tone="accent" className="shrink-0 text-[10px]">
+                          <Badge tone="accent" className="shrink-0 text-caption">
                             {t('Pinned')}
                           </Badge>
                         )}
                       </div>
-                      <div className="mt-1 flex items-center justify-between gap-2">
-                        <Badge tone={STATUS_BADGE_TONES[c.status]} className="text-[10px]">
+                      <div className="mt-1.25 flex items-center justify-between gap-1.25">
+                        <Badge tone={STATUS_BADGE_TONES[c.status]} className="text-caption">
                           {t(STATUS_LABELS[c.status])}
                         </Badge>
-                        <span className="truncate text-[10px] text-ink-tertiary">
+                        <span className="truncate text-caption text-ink-tertiary">
                           {formatDate(c.lastMessageAt ?? c.createdAt)}
                         </span>
                       </div>
@@ -1015,7 +1010,7 @@ export function ChatPage() {
                       role="group"
                       aria-label={t('Rate this conversation')}
                     >
-                      <span className="me-1 text-[10px] text-ink-tertiary">
+                      <span className="me-1 text-caption text-ink-tertiary">
                         {t('Rate')}
                       </span>
                       {[1, 2, 3, 4, 5].map((star) => (
@@ -1043,11 +1038,11 @@ export function ChatPage() {
                       ))}
                     </div>
                   ) : (
-                    <span className="text-[10px] text-ink-tertiary">
+                    <span className="text-caption text-ink-tertiary">
                       {t('Rate once the chat is solved / not solved')}
                     </span>
                   )}
-                  <span className="truncate text-[10px] text-ink-tertiary">
+                  <span className="truncate text-caption text-ink-tertiary">
                     {activeConversation.guidelineSnapshotHash
                       ? `${t('Guidance bound')}: ${activeConversation.guidelineSnapshotHash.slice(0, 12)}…`
                       : t('No guidance bound')}
@@ -1081,7 +1076,7 @@ export function ChatPage() {
                     <div key={msg.id} className="flex items-end">
                       <div
                         className={cn(
-                          'flex size-8 shrink-0 items-center justify-center rounded-full text-12',
+                          'flex size-8 shrink-0 items-center justify-center rounded-md text-12',
                           isAgent
                             ? 'bg-warning-muted text-warning-foreground'
                             : isAssistant

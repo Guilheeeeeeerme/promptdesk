@@ -20,7 +20,7 @@ export function Banner({ tone = 'info', children, className }: BannerProps) {
   return (
     <div
       className={cn(
-        'rounded-sm border px-4 py-3 text-14 text-pretty',
+        'rounded-sm border px-4 py-3 text-17 font-normal text-pretty',
         tones[tone],
         className,
       )}

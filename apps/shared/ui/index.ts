@@ -13,5 +13,4 @@ export { Skeleton, PageSkeleton } from './components/Skeleton';
 export { AlertDialog, type AlertDialogProps } from './components/AlertDialog';
 export { EmptyState } from './components/EmptyState';
 export { IconButton, type IconButtonProps } from './components/IconButton';
-export { ThemeToggle } from './components/ThemeToggle';
 export * from './icons';
