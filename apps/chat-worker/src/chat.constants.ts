@@ -1,4 +1,5 @@
 import { renderPrompt } from './prompt-registry';
+import { neutralizeUntrusted } from './untrusted';
 
 export const CHAT_GENERATE_QUEUE = "chat-generate";
 export const GUIDELINE_VALIDATE_QUEUE = "guideline-validate";
@@ -92,7 +93,9 @@ export function buildSupportPrompt(params: {
   return {
     systemInstruction: `${systemInstruction}\n\n${languageInstruction}`,
     context: renderPrompt('support.copilot.context', {
-      payload: JSON.stringify(payload),
+      // JSON encoding escapes quotes and newlines but leaves the fence marker
+      // text intact, so neutralize before delimiting (OWASP LLM01).
+      payload: neutralizeUntrusted(JSON.stringify(payload)),
     }),
   };
 }
