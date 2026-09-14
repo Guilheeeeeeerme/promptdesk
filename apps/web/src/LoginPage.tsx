@@ -89,7 +89,8 @@ export function LoginPage() {
   return (
     <div className="relative flex min-h-dvh flex-col justify-center overflow-x-hidden bg-surface-base px-4 py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <p className="text-center text-12 font-medium uppercase text-ink-tertiary">
+        <p className="flex items-center justify-center gap-2 text-center text-12 font-medium uppercase text-ink-tertiary">
+          <img src="/brand.svg" alt="" width={20} height={20} className="rounded-sm" />
           PromptDesk
         </p>
         <h1 className="mt-1.25 text-balance text-center text-display text-ink-primary">

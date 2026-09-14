@@ -172,7 +172,8 @@ export function AppShell() {
     <div className="flex min-h-dvh overflow-x-hidden bg-surface-base">
       <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-52 md:shrink-0 md:flex-col md:border-e md:border-line">
         <div className="border-b border-line-subtle px-4 py-5">
-          <p className="text-12 font-medium uppercase text-ink-tertiary">
+          <p className="flex items-center gap-2 text-12 font-medium uppercase text-ink-tertiary">
+            <img src="/brand.svg" alt="" width={18} height={18} className="rounded-sm" />
             PromptDesk
           </p>
           <h1 className="mt-1 text-balance text-15 font-semibold text-ink-primary">
@@ -240,7 +241,8 @@ export function AppShell() {
               >
                 <MenuIcon className="size-4" />
               </IconButton>
-              <h1 className="truncate text-15 font-semibold text-ink-primary md:hidden">
+              <h1 className="flex items-center gap-2 truncate text-15 font-semibold text-ink-primary md:hidden">
+                <img src="/brand.svg" alt="" width={18} height={18} className="rounded-sm" />
                 PromptDesk
               </h1>
             </div>
