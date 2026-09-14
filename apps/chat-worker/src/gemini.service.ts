@@ -11,6 +11,7 @@ import {
   type PlaceholderValues,
 } from "./placeholders";
 import { renderPrompt } from './prompt-registry';
+import { neutralizeUntrusted } from './untrusted';
 
 const PROVIDER_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_TOKENS = 1_000;
@@ -57,7 +58,9 @@ export class GeminiService {
       },
       this.requestOptions,
     );    const result = await modelClient.generateContent(
-      renderPrompt('support.guideline.validation.user', { guideline: content }),
+      renderPrompt('support.guideline.validation.user', {
+        guideline: neutralizeUntrusted(content),
+      }),
       { timeout: PROVIDER_TIMEOUT_MS },
     );
     return JSON.parse(result.response.text());

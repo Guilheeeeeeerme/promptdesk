@@ -27,6 +27,7 @@ import { boundPromptContext } from './prompt-budget';
 import { resolveGuidelineContext } from './guideline-context';
 import { resolveProviderOrder } from './provider-policy';
 import { LlmBudgetExceededError, LlmBudgetService } from './llm-budget';
+import { OutputPolicyError, screenModelOutput } from './output-policy';
 
 @Processor(CHAT_GENERATE_QUEUE)
 export class ChatGenerateProcessor extends WorkerHost {
@@ -255,6 +256,11 @@ export class ChatGenerateProcessor extends WorkerHost {
 
       const reply = applyPlaceholders(rawReply, placeholders);
 
+      // Model output is untrusted input: an agent may paste this reply to a
+      // customer, so refuse to persist or publish an exfiltration payload
+      // (OWASP LLM10). Screening after substitution covers injected values.
+      screenModelOutput(reply);
+
       // Critical: do not write completed content if stopped during the LLM call.
       await this.assertNotAborted(assistantMessageId);
 
@@ -301,6 +307,38 @@ export class ChatGenerateProcessor extends WorkerHost {
       if (err instanceof LlmBudgetExceededError) {
         this.logger.warn(
           `LLM budget halt for ${assistantMessageId}: ${err.reason} company=${err.companyId}`,
+        );
+        const failed = await this.prisma.chatMessage.updateMany({
+          where: {
+            id: assistantMessageId,
+            status: { in: [MessageStatus.pending, MessageStatus.processing] },
+          },
+          data: {
+            status: MessageStatus.failed,
+            lastError: err.message,
+            attemptCount: totalAttempts,
+            provider,
+          },
+        });
+        if (failed.count > 0) {
+          await this.events.publish({
+            userId,
+            assistantMessageId,
+            userMessageId,
+            status: 'failed',
+            error: err.message,
+            provider,
+          });
+        }
+        return;
+      }
+
+      // OWASP LLM10 zero-trust output + LLM06: policy denial must fail closed
+      // once — no provider failover and no BullMQ rethrow/retry that would
+      // re-invoke the model and multiply spend.
+      if (err instanceof OutputPolicyError) {
+        this.logger.warn(
+          `Output policy halt for ${assistantMessageId}: ${err.policyId}`,
         );
         const failed = await this.prisma.chatMessage.updateMany({
           where: {
