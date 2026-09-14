@@ -16,7 +16,7 @@ Multi-tenant AI customer-support platform: admin SSO host, support-chat micro-fr
 
 ## Technical docs (GitHub Pages)
 
-**https://guilheeeeeeerme.github.io/promptdesk/** — ecosystem architecture site (`/en`, `/pt` scaffold). Source: [`docs-site/`](docs-site/). Agent update prompt: [`docs/prompts/update-gh-pages.md`](docs/prompts/update-gh-pages.md).
+**https://guilheeeeeeerme.github.io/ferredemo-docs/** — ecosystem architecture site (`/en`, `/pt`). Hosted in dedicated repo [`ferredemo-docs`](https://github.com/Guilheeeeeeerme/ferredemo-docs). Agent update prompt: [`docs/prompts/update-gh-pages.md`](docs/prompts/update-gh-pages.md) (pointer).
 
 ## AI engineering (audit-honest)
 
