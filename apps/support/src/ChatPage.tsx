@@ -700,7 +700,8 @@ export function ChatPage() {
       <header className="sticky top-0 z-40 border-b border-line bg-surface-base supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex h-[var(--header-height)] max-w-content items-center justify-between gap-3 px-4 sm:px-5 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <p className="hidden text-12 font-medium uppercase text-ink-tertiary sm:block">
+            <p className="hidden items-center gap-2 text-12 font-medium uppercase text-ink-tertiary sm:flex">
+              <img src="/brand.svg" alt="" width={18} height={18} className="rounded-sm" />
               PromptDesk
             </p>
             <h1 className="truncate text-15 font-semibold text-ink-primary">
