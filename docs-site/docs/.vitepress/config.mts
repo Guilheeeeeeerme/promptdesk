@@ -117,11 +117,6 @@ export default defineConfig({
     theme: { light: 'github-light', dark: 'github-dark' },
   },
   locales: {
-    root: {
-      label: 'English',
-      lang: 'en-US',
-      link: '/en/',
-    },
     en: {
       label: 'English',
       lang: 'en-US',
