@@ -57,4 +57,14 @@ describe('screenModelOutput', () => {
       screenModelOutput('Ask the customer for the order ID, then issue the refund.'),
     ).not.toThrow();
   });
+
+  // Processor contract (chat.processor): OutputPolicyError must halt like
+  // LlmBudgetExceededError — mark failed, publish, return (no failover/retry).
+  it('exposes a stable Error subclass for fail-closed halt', () => {
+    const err = new OutputPolicyError('data-exfil');
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(OutputPolicyError);
+    expect(err.name).toBe('OutputPolicyError');
+    expect(err.message).toContain('data-exfil');
+  });
 });
