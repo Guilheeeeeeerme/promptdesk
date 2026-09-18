@@ -18,6 +18,10 @@ import {
   SEED_OPENAI_INPUT_USD,
   WEB_SEARCH_QUERIES,
 } from './model-rank.constants';
+import {
+  resolveGeminiBaseUrlOrDefault,
+  resolveOpenAiBaseUrlOrDefault,
+} from './llm-headroom';
 
 type RankedModel = { id: string; inputUsd: number };
 
@@ -266,10 +270,10 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) return [];
     try {
-      const base = (
-        this.config.get<string>('GEMINI_BASE_URL')?.trim() ||
-        'https://generativelanguage.googleapis.com'
-      ).replace(/\/$/, '');
+      const base = resolveGeminiBaseUrlOrDefault(
+        this.config.get<string>('LLM_USE_HEADROOM'),
+        this.config.get<string>('GEMINI_BASE_URL'),
+      );
       const url = `${base}/v1beta/models?key=${encodeURIComponent(apiKey)}`;
       const res = await fetch(url, {
         signal: AbortSignal.timeout(12_000),
@@ -299,10 +303,10 @@ export class ModelRankService implements OnModuleInit, OnModuleDestroy {
     const apiKey = this.config.get<string>('OPENAI_API_KEY');
     if (!apiKey) return [];
     try {
-      const base = (
-        this.config.get<string>('OPENAI_BASE_URL')?.trim() ||
-        'https://api.openai.com/v1'
-      ).replace(/\/$/, '');
+      const base = resolveOpenAiBaseUrlOrDefault(
+        this.config.get<string>('LLM_USE_HEADROOM'),
+        this.config.get<string>('OPENAI_BASE_URL'),
+      );
       const res = await fetch(`${base}/models`, {
         headers: { Authorization: `Bearer ${apiKey}` },
         signal: AbortSignal.timeout(12_000),

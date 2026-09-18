@@ -12,7 +12,7 @@ Agent behavioral rules: see [AGENTS.md](./AGENTS.md). LLM policy reference (also
 | Support | https://support.promptdesk.ferredemo.dev |
 | API | https://api.promptdesk.ferredemo.dev |
 
-Production deploys are owned by the **infra** repo (Jenkins job `promptdesk`).
+Production deploys are owned by the **infra** repo (Jenkins job `promptdesk`). Prod dual Postgres is Supabase (schemas `promptdesk` / `promptdesk_chat`); local Compose still uses Docker Postgres.
 
 ## Layout
 
@@ -50,12 +50,14 @@ web (SSO) / support MFE
 ## Local
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local.docker   # dual Compose Postgres (core + chat)
+bash ../infra/scripts/supabase_dev_tunnel.sh -f
+python3 ../infra/scripts/write_local_supabase_env.py   # .env → remote via tunnel
 docker compose up --build
 # or: scripts/up.sh
 ```
 
-Typical ports: web `:8080`, support `:8081`, API `:3000`. Prod Redis uses DB `/0`.
+**DB switch:** `.env` = remote Supabase (`promptdesk` + `promptdesk_chat` roles, keep distinct); `.env.local.docker` = internal Compose DBs. Typical ports: web `:8080`, support `:8081`, API `:3000`. Prod Redis uses DB `/0`.
 
 ## Commands
 

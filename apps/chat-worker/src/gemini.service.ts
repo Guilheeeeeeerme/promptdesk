@@ -12,6 +12,7 @@ import {
 } from "./placeholders";
 import { renderPrompt } from './prompt-registry';
 import { neutralizeUntrusted } from './untrusted';
+import { resolveGeminiBaseUrl } from "./llm-headroom";
 
 const PROVIDER_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_TOKENS = 1_000;
@@ -33,10 +34,11 @@ export class GeminiService {
       "gemini-2.5-flash-lite",
     );
     this.client = new GoogleGenerativeAI(apiKey);
-    const baseUrl = this.config.get<string>("GEMINI_BASE_URL")?.trim();
-    this.requestOptions = baseUrl
-      ? { baseUrl: baseUrl.replace(/\/$/, "") }
-      : undefined;
+    const baseUrl = resolveGeminiBaseUrl(
+      this.config.get<string>("LLM_USE_HEADROOM"),
+      this.config.get<string>("GEMINI_BASE_URL"),
+    );
+    this.requestOptions = baseUrl ? { baseUrl } : undefined;
   }
 
   getModelName(override?: string): string {

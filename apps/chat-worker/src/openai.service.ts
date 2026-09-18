@@ -12,6 +12,7 @@ import {
 } from "./placeholders";
 import { renderPrompt } from './prompt-registry';
 import { neutralizeUntrusted } from './untrusted';
+import { resolveOpenAiBaseUrl } from "./llm-headroom";
 
 const PROVIDER_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_TOKENS = 1_000;
@@ -64,7 +65,10 @@ export class OpenAiService {
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is required for OpenAI failover");
     }
-    const baseURL = this.config.get<string>("OPENAI_BASE_URL")?.trim() || undefined;
+    const baseURL = resolveOpenAiBaseUrl(
+      this.config.get<string>("LLM_USE_HEADROOM"),
+      this.config.get<string>("OPENAI_BASE_URL"),
+    );
     this.client = new OpenAI({ apiKey, baseURL });
     return this.client;
   }
