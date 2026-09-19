@@ -12,7 +12,7 @@ Agent behavioral rules: see [AGENTS.md](./AGENTS.md). LLM policy reference (also
 | Support | https://support.promptdesk.ferredemo.dev |
 | API | https://api.promptdesk.ferredemo.dev |
 
-Production deploys are owned by the **infra** repo (GitHub Actions `Deploy app` → GHCR → VPS). Prod dual Postgres = VPS containers `postgres-promptdesk` / `postgres-promptdesk-chat` (roles `promptdesk` / `promptdesk_chat`, keep distinct); local Compose uses its own Docker Postgres pair. PromptDesk never uses Supabase.
+Production deploys are owned by the **infra** repo (GitHub Actions `Deploy app` → GHCR → VPS). Prod dual Postgres = VPS containers `postgres-promptdesk` / `postgres-promptdesk-chat` (roles `promptdesk` / `promptdesk_chat`, keep distinct); local Compose uses its own Docker Postgres pair. PromptDesk never uses Supabase. Step-by-step: [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
 
 ## Layout
 

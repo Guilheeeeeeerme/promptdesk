@@ -59,4 +59,8 @@ docker compose up --build
 
 - Agent map: [`CLAUDE.md`](CLAUDE.md) · [`AGENTS.md`](AGENTS.md)
 - Observability notes: [`docs/observability.md`](docs/observability.md)
-- Production deploy: private **infra** repo (Jenkins)
+- Production deploy: private **infra** repo (GitHub Actions → GHCR → VPS; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+
+## Deployment
+
+Push to `main` → infra GitHub Actions builds to GHCR and deploys. Details: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
