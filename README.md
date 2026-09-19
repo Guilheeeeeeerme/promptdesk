@@ -45,10 +45,7 @@ Brand mark: [`branding/promptdesk.svg`](branding/promptdesk.svg) (desk blotter +
 ## Quick start
 
 ```bash
-# Standalone local DBs: cp .env.example .env.local.docker && cp .env.local.docker .env
-# Remote Supabase (tunnel): bash ../infra/scripts/supabase_dev_tunnel.sh -f
-#                          python3 ../infra/scripts/write_local_supabase_env.py
-cp .env.example .env
+cp .env.example .env.local.docker && cp .env.local.docker .env   # Compose Postgres pair
 docker compose up --build
 ```
 
@@ -62,4 +59,8 @@ docker compose up --build
 
 - Agent map: [`CLAUDE.md`](CLAUDE.md) · [`AGENTS.md`](AGENTS.md)
 - Observability notes: [`docs/observability.md`](docs/observability.md)
-- Production deploy: private **infra** repo (Jenkins)
+- Production deploy: private **infra** repo (GitHub Actions → GHCR → VPS; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+
+## Deployment
+
+Push to `main` → infra GitHub Actions builds to GHCR and deploys. Details: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

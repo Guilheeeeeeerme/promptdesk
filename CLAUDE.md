@@ -12,7 +12,7 @@ Agent behavioral rules: see [AGENTS.md](./AGENTS.md). LLM policy reference (also
 | Support | https://support.promptdesk.ferredemo.dev |
 | API | https://api.promptdesk.ferredemo.dev |
 
-Production deploys are owned by the **infra** repo (Jenkins job `promptdesk`). Prod dual Postgres is Supabase (schemas `promptdesk` / `promptdesk_chat`); local Compose still uses Docker Postgres.
+Production deploys are owned by the **infra** repo (GitHub Actions `Deploy app` → GHCR → VPS). Prod dual Postgres = VPS containers `postgres-promptdesk` / `postgres-promptdesk-chat` (roles `promptdesk` / `promptdesk_chat`, keep distinct); local Compose uses its own Docker Postgres pair. PromptDesk never uses Supabase. Step-by-step: [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
 
 ## Layout
 
@@ -50,14 +50,13 @@ web (SSO) / support MFE
 ## Local
 
 ```bash
-cp .env.example .env.local.docker   # dual Compose Postgres (core + chat)
-bash ../infra/scripts/supabase_dev_tunnel.sh -f
-python3 ../infra/scripts/write_local_supabase_env.py   # .env → remote via tunnel
+cp .env.example .env.local.docker   # dual Compose Postgres (core + chat) + hot reload
+cp .env.local.docker .env
 docker compose up --build
 # or: scripts/up.sh
 ```
 
-**DB switch:** `.env` = remote Supabase (`promptdesk` + `promptdesk_chat` roles, keep distinct); `.env.local.docker` = internal Compose DBs. Typical ports: web `:8080`, support `:8081`, API `:3000`. Prod Redis uses DB `/0`.
+**DB:** local = Compose pair (`.env.local.docker`); prod = VPS containers (infra repo). No remote tunnel. Typical ports: web `:8080`, support `:8081`, API `:3000`. Prod Redis uses DB `/0`.
 
 ## Commands
 
