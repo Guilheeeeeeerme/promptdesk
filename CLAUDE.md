@@ -75,7 +75,7 @@ npm test
 # oxlint via each app's package scripts
 ```
 
-Jenkins (via infra): `npm ci && npm run prisma:generate && npm test -- --passWithNoTests` in `apps/api`.
+CI pre-deploy (via infra): `npm ci && npm run prisma:generate && npm test -- --passWithNoTests` in `apps/api`.
 
 Seeds: `seed` / `seed:platform` / `seed:demo` under `apps/api`.
 
