@@ -101,6 +101,8 @@ jobs:
       # Throwaway provider creds so fail-closed LLM services boot (they are
       # never invoked in the smoke; values are fake by construction).
       GEMINI_API_KEY: smoke-gemini-key
+      # Compose interpolates GIT_SHA into services; must match the released image.
+      GIT_SHA: ${{ inputs.sha || github.sha }}
       LLM_USE_HEADROOM: "true"
       GEMINI_BASE_URL: http://headroom:8787
       DATABASE_URL: postgresql://promptdesk:ci-promptdesk-throwaway@postgres:5432/promptdesk?schema=public
