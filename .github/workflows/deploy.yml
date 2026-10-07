@@ -48,6 +48,11 @@ jobs:
         working-directory: apps/${{ matrix.app }}
         run: |
           npm ci --no-audit --no-fund
+          # Generate @prisma/client (+ @prisma/chat-client) before jest —
+          # test suites import them directly.
+          for schema in prisma/schema.prisma prisma-chat/schema.prisma; do
+            if [ -f "$schema" ]; then npx --yes prisma generate --schema "$schema"; fi
+          done
           npm test -- --passWithNoTests
 
   build:
