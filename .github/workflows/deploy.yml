@@ -98,6 +98,11 @@ jobs:
       POSTGRES_PROMPTDESK_PASSWORD: ci-promptdesk-throwaway
       POSTGRES_PROMPTDESK_CHAT_PASSWORD: ci-chat-throwaway
       REDIS_PASSWORD: ci-redis-throwaway
+      # Throwaway provider creds so fail-closed LLM services boot (they are
+      # never invoked in the smoke; values are fake by construction).
+      GEMINI_API_KEY: smoke-gemini-key
+      LLM_USE_HEADROOM: "true"
+      GEMINI_BASE_URL: http://headroom:8787
       DATABASE_URL: postgresql://promptdesk:ci-promptdesk-throwaway@postgres:5432/promptdesk?schema=public
       DATABASE_DIRECT_URL: postgresql://promptdesk:ci-promptdesk-throwaway@postgres:5432/promptdesk?schema=public
       CHAT_DATABASE_URL: postgresql://promptdesk_chat:ci-chat-throwaway@postgres:5432/promptdesk_chat?schema=public
