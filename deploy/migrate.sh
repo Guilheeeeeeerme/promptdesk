@@ -1,9 +1,10 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # One-shot migration runner for PromptDesk's dual Prisma schemas.
+# POSIX-strict (no bash on the slim runtime image; /bin/sh is dash).
 # Runs in the `migrate` compose service (same image as the API). The API and
 # chat-worker containers NEVER migrate on start — this is the only migration
 # path in production. Honours SKIP_MIGRATIONS=1 (instant exit 0, rollback path).
-set -euo pipefail
+set -eu
 
 api_dir="${API_DIR:-/app}"
 
