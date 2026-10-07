@@ -1,0 +1,217 @@
+# Dokploy Compose stack for PromptDesk: API + chat-worker + own Postgres + own Redis.
+# Only the API joins dokploy-network (Traefik-routed); everything else is private.
+# PromptDesk is Hostinger-only: this Postgres is Dokploy-owned, never Supabase.
+# Deployed via generic Git source (branch: production) + one webhook call per release.
+#
+# Migration decoupling (hard rule): app containers never migrate on start. The
+# one-shot `migrate` service is behind the `migrate` profile; its depends_on in
+# `api` uses `required: false` + `service_completed_successfully`, the compose
+# spec's cleanest way to say "wait on it only when it is enabled". Default
+# deploys skip it; to apply migrations explicitly run (see deploy/README.md):
+#   docker compose --profile migrate run --rm migrate
+# Set SKIP_MIGRATIONS=1 to make `migrate` exit 0 immediately (rollback path).
+
+name: promptdesk
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - promptdesk-internal
+    environment:
+      # Init superuser (private network only); app roles are created in initdb.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_PROMPTDESK_PASSWORD: ${POSTGRES_PROMPTDESK_PASSWORD:?}
+      POSTGRES_PROMPTDESK_CHAT_PASSWORD: ${POSTGRES_PROMPTDESK_CHAT_PASSWORD:?}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: ${PD_POSTGRES_MEM_LIMIT:-512m}
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?}
+      - --maxmemory-policy
+      - noeviction
+    networks:
+      - promptdesk-internal
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: ${PD_REDIS_MEM_LIMIT:-128m}
+
+  migrate:
+    image: ${API_IMAGE:-ghcr.io/guilheeeeeeerme/promptdesk/api:production}
+    command:
+      - sh
+      - /app/deploy/migrate.sh
+    profiles:
+      - migrate
+    restart: 'no'
+    networks:
+      - promptdesk-internal
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?}
+      CHAT_DATABASE_URL: ${CHAT_DATABASE_URL:?}
+      SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-}
+      GIT_SHA: ${GIT_SHA:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: ${PD_MIGRATE_MEM_LIMIT:-256m}
+
+  api:
+    image: ${API_IMAGE:-ghcr.io/guilheeeeeeerme/promptdesk/api:production}
+    pull_policy: always
+    restart: unless-stopped
+    networks:
+      - promptdesk-internal
+      - dokploy-network
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?}
+      CHAT_DATABASE_URL: ${CHAT_DATABASE_URL:?}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-86400}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://app.promptdesk.ferredemo.dev,https://support.promptdesk.ferredemo.dev}
+      SSO_RETURN_ORIGINS: ${SSO_RETURN_ORIGINS:-https://support.promptdesk.ferredemo.dev}
+      PORT: 3000
+      CHAT_RATE_LIMIT_PER_MINUTE: ${CHAT_RATE_LIMIT_PER_MINUTE:-20}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      SERVICE_NAME: promptdesk-api
+      LOG_LEVEL: ${LOG_LEVEL:-log}
+      NODE_ENV: production
+      # LLM surface (keys live here; chat-worker consumes the same names)
+      LLM_USE_HEADROOM: ${LLM_USE_HEADROOM:-true}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-http://headroom:8787}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-nano}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://headroom:8787/v1}
+      LLM_PROVIDER_ORDER: ${LLM_PROVIDER_ORDER:-gemini,openai}
+    depends_on:
+      # Profiled one-shot; required:false keeps default deploys unblocked.
+      migrate:
+        condition: service_completed_successfully
+        required: false
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/version').then((r) => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: ${PD_API_MEM_LIMIT:-640m}
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.promptdesk-api.rule: Host(`api.promptdesk.ferredemo.dev`)
+      traefik.http.routers.promptdesk-api.entrypoints: websecure
+      traefik.http.routers.promptdesk-api.tls.certresolver: letsencrypt
+      traefik.http.routers.promptdesk-api.middlewares: security-headers@file,compress@file
+      # /internal is control-plane only: prioritised router -> noop@internal,
+      # so it never resolves to the app from the edge (returns 404).
+      traefik.http.routers.promptdesk-api-internal.rule: Host(`api.promptdesk.ferredemo.dev`) && PathPrefix(`/internal`)
+      traefik.http.routers.promptdesk-api-internal.priority: '200'
+      traefik.http.routers.promptdesk-api-internal.service: noop@internal
+      traefik.http.services.promptdesk-api.loadbalancer.server.port: '3000'
+
+  chatworker:
+    image: ${CHATWORKER_IMAGE:-ghcr.io/guilheeeeeeerme/promptdesk/chatworker:production}
+    pull_policy: always
+    restart: unless-stopped
+    networks:
+      - promptdesk-internal
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?}
+      CHAT_DATABASE_URL: ${CHAT_DATABASE_URL:?}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379
+      NODE_ENV: production
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-http://headroom:8787}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-nano}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://headroom:8787/v1}
+      LLM_USE_HEADROOM: ${LLM_USE_HEADROOM:-true}
+      LLM_PROVIDER_ORDER: ${LLM_PROVIDER_ORDER:-gemini,openai}
+      MODEL_RANK_REFRESH_MS: ${MODEL_RANK_REFRESH_MS:-43200000}
+      MODEL_RANK_TOP_N: ${MODEL_RANK_TOP_N:-3}
+      LLM_RATE_LIMIT_PER_MINUTE: ${LLM_RATE_LIMIT_PER_MINUTE:-20}
+      LLM_DAILY_BUDGET: ${LLM_DAILY_BUDGET:-500}
+      CHAT_JOB_ATTEMPTS: ${CHAT_JOB_ATTEMPTS:-3}
+      CHAT_WORKER_PORT: 3001
+      SERVICE_NAME: promptdesk-chatworker
+      GIT_SHA: ${GIT_SHA:-unknown}
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: ${PD_CHATWORKER_MEM_LIMIT:-640m}
+
+volumes:
+  postgres_data:
+
+networks:
+  dokploy-network:
+    external: true
+  promptdesk-internal:
+    internal: true
