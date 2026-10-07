@@ -36,7 +36,7 @@ cannot block on migrations, and rollbacks keep them off entirely.
    (e.g. `openssl rand -hex 24`). Required non-default keys: `POSTGRES_PASSWORD`,
    `POSTGRES_PROMPTDESK_PASSWORD`, `POSTGRES_PROMPTDESK_CHAT_PASSWORD`,
    `REDIS_PASSWORD`, `DATABASE_URL`, `CHAT_DATABASE_URL`, `GEMINI_API_KEY`
-   (+ `OPENAI_API_KEY` if failover is wanted). Set `GIT_SHA` when triggering a
+. Set `GIT_SHA` when triggering a
    manual run; CI normally injects it. Copy one of `deploy/tiers/*.env` into
    the same env if you want to pin memory limits explicitly.
 3. **Deploy.** Dokploy runs `docker compose up -d`: postgres first boot runs
