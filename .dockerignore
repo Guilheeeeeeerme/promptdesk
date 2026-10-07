@@ -1,6 +1,9 @@
 # Buildx contexts are the repo root; keep images small + deterministic.
+# (originals kept; added for the deploy/docker images)
 .git
 .github
+.serena
+.playwright-mcp
 **/.git
 **/node_modules
 **/dist
@@ -8,10 +11,12 @@
 **/*.tsbuildinfo
 apps/web
 apps/support
-deploy/README.md
-deploy/tiers
+use-cases
+guidelines
 docs
 scripts
+deploy/README.md
+deploy/tiers
 *.md
 .env
 .env.*
