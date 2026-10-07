@@ -191,6 +191,10 @@ jobs:
           DOKPLOY_DEPLOY_HOOK_URL: ${{ secrets.DOKPLOY_DEPLOY_HOOK_URL }}
         run: |
           set -euo pipefail
+          if [ -z "${DOKPLOY_DEPLOY_HOOK_URL:-}" ]; then
+            echo "::error::DOKPLOY_DEPLOY_HOOK_URL secret missing — create the Bangploy Compose stack (panel: https://dokploy.ferredemo.dev), copy its deploy hook URL, add it as this repo's secret. Steps: deploy/README.md + infra docs/RUNBOOK-REBUILD.md"
+            exit 1
+          fi
           code=$(curl -sS -o /dev/null -w '%{http_code}' "$DOKPLOY_DEPLOY_HOOK_URL")
           echo "webhook status: $code"
           [ "$code" = 200 ] || { echo "::error::expected 200 from deploy hook, got $code"; exit 1; }
