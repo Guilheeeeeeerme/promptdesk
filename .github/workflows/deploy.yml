@@ -138,7 +138,14 @@ jobs:
           PD_CHATWORKER_MEM_LIMIT: 256m
           PD_POSTGRES_MEM_LIMIT: 512m
           PD_REDIS_MEM_LIMIT: 128m
-        run: docker compose -f compose.prod.yml up -d --wait --wait-timeout 240 api chatworker
+        run: |
+          if ! docker compose -f compose.prod.yml up -d --wait --wait-timeout 240 api chatworker; then
+            echo "---- api container log ----"
+            docker compose -f compose.prod.yml logs api | head -120
+            echo "---- chatworker container log ----"
+            docker compose -f compose.prod.yml logs chatworker | head -160
+            exit 1
+          fi
       - name: Smoke /version (runner-local)
         run: |
           set -euo pipefail
