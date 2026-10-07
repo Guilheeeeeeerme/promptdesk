@@ -1,0 +1,70 @@
+# Cloudflare Pages deploys for the two PromptDesk SPAs (not on the VPS).
+# Frontend build-target URLs point at the API served by Traefik on the VPS.
+# Secrets needed: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-promptdesk
+  cancel-in-progress: false
+
+env:
+  VITE_API_URL: https://api.promptdesk.ferredemo.dev
+
+jobs:
+  app:
+    name: deploy promptdesk-app (apps/web)
+    runs-on: ubuntu-24.04
+    env:
+      VITE_MAIN_ORIGIN: https://app.promptdesk.ferredemo.dev
+      VITE_SUPPORT_ORIGIN: https://support.promptdesk.ferredemo.dev
+      VITE_SSO_RETURN_ORIGINS: https://support.promptdesk.ferredemo.dev
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Build apps/web
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/web/dist --project-name=promptdesk-app
+
+  support:
+    name: deploy promptdesk-support (apps/support)
+    runs-on: ubuntu-24.04
+    env:
+      VITE_MAIN_ORIGIN: https://app.promptdesk.ferredemo.dev
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/support/package-lock.json
+      - name: Build apps/support
+        working-directory: apps/support
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/support/dist --project-name=promptdesk-support
