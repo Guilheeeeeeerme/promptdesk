@@ -99,7 +99,9 @@ jobs:
       POSTGRES_PROMPTDESK_CHAT_PASSWORD: ci-chat-throwaway
       REDIS_PASSWORD: ci-redis-throwaway
       DATABASE_URL: postgresql://promptdesk:ci-promptdesk-throwaway@postgres:5432/promptdesk?schema=public
+      DATABASE_DIRECT_URL: postgresql://promptdesk:ci-promptdesk-throwaway@postgres:5432/promptdesk?schema=public
       CHAT_DATABASE_URL: postgresql://promptdesk_chat:ci-chat-throwaway@postgres:5432/promptdesk_chat?schema=public
+      CHAT_DATABASE_DIRECT_URL: postgresql://promptdesk_chat:ci-chat-throwaway@postgres:5432/promptdesk_chat?schema=public
       # No API_IMAGE/CHATWORKER_IMAGE overrides: smoke pulls :production, which
       # `build` just pointed at the released sha (inputs.sha || github.sha).
     steps:

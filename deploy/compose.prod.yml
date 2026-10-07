@@ -77,7 +77,9 @@ services:
       - promptdesk-internal
     environment:
       DATABASE_URL: ${DATABASE_URL:?}
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-}
       CHAT_DATABASE_URL: ${CHAT_DATABASE_URL:?}
+      CHAT_DATABASE_DIRECT_URL: ${CHAT_DATABASE_DIRECT_URL:-}
       SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-}
       GIT_SHA: ${GIT_SHA:-}
     depends_on:
