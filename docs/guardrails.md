@@ -12,9 +12,13 @@ reference promptdesk; each project maps them to its equivalent locations.
   version must be 1, every entry needs complete metadata
   (id/kind/purpose/when/audience/variables/security/output_contract/template),
   duplicate ids fail. Missing or malformed registry = boot failure.
-- Deterministic screening runs BEFORE any LLM call:
+- Deterministic screening runs BEFORE any model call:
   `src/guideline-validator.ts` matches content against
-  `MALICIOUS_GUIDELINE_PATTERNS` and blocks with zero LLM spend.
+  `MALICIOUS_GUIDELINE_PATTERNS` and blocks with zero provider spend.
+- Guideline classification after the screen: **JEV Choice** when
+  `JEV_GUIDELINE_MODE=active` (`src/jev.service.ts`, `src/jev-guideline.provider.ts`);
+  Gemini/OpenAI remain the `off`/`shadow` path. Chat reply generation stays Gemini.
+  See [intelligence-routing.md](./intelligence-routing.md).
 - System instructions are code-controlled and built by the application
   (`src/chat.constants.ts` `buildSupportPrompt`); users never author them.
 - Untrusted data (conversation history, agent text, company guidelines) may

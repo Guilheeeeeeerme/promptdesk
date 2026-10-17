@@ -15,6 +15,7 @@ import { LlmBudgetService } from "./llm-budget";
 import { ModelRankService } from "./model-rank.service";
 import { OpenAiService } from "./openai.service";
 import { PrismaService } from "./prisma.service";
+import { JevService } from "./jev.service";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { PrismaService } from "./prisma.service";
     CorePrismaService,
     GeminiService,
     OpenAiService,
+    JevService,
     ModelRankService,
     LlmBudgetService,
     EventsPublisher,
