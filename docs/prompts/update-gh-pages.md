@@ -25,7 +25,7 @@ Collect commits since the last docs update that touch PromptDesk paths such as:
 | Guardrails | `docs/guardrails.md`, screening / OutputPolicy paths in API or worker |
 | Auth / SSO | `apps/shared/auth/**`, `SSO_RETURN_ORIGINS`, session TTL |
 | Frontends | `apps/web/**`, `apps/support/**` (architecture edges only) |
-| Defaults | `MODEL_RANK_*`, `LLM_PROVIDER_ORDER`, budgets, Redis ladder keys |
+| Defaults | `GEMINI_*`, `JEV_*`, budgets |
 
 Record **SHA range** (or single SHAs) and a one-line summary per commit.
 Cross-check sibling repos (`infra`, shared standards) only when those diffs

@@ -16,7 +16,6 @@ import { CorePrismaService } from './core-prisma.service';
 import { ensureCustomerForChat } from './customer.ensure';
 import { EventsPublisher } from './events.publisher';
 import { GeminiService } from './gemini.service';
-import { ModelRankService } from './model-rank.service';
 import { OpenAiService } from './openai.service';
 import {
   applyPlaceholders,
@@ -41,7 +40,6 @@ export class ChatGenerateProcessor extends WorkerHost {
     private readonly corePrisma: CorePrismaService,
     private readonly gemini: GeminiService,
     private readonly openai: OpenAiService,
-    private readonly modelRank: ModelRankService,
     private readonly events: EventsPublisher,
     private readonly config: ConfigService,
     private readonly llmBudget: LlmBudgetService,
@@ -55,10 +53,7 @@ export class ChatGenerateProcessor extends WorkerHost {
       lazyConnect: false,
     });
     this.jobAttempts = Number(this.config.get('CHAT_JOB_ATTEMPTS', 3));
-    this.providerOrder = resolveProviderOrder(
-      this.config.get<string>('LLM_PROVIDER_ORDER'),
-      { gemini: true, openai: this.openai.isConfigured() },
-    );
+    this.providerOrder = resolveProviderOrder(undefined, { gemini: true });
   }
 
   private async isAborted(assistantMessageId: string): Promise<boolean> {
@@ -217,7 +212,7 @@ export class ChatGenerateProcessor extends WorkerHost {
         (m) => m.id !== userMessageId || m.content.length > 0,
       );
 
-      const model = await this.resolveModel(provider, attemptsMade);
+      const model = this.gemini.getModelName();
       this.logger.log(
         `Generating provider=${provider} model=${model} attempt=${attemptsMade}/${maxAttempts}`,
       );
@@ -391,7 +386,7 @@ export class ChatGenerateProcessor extends WorkerHost {
           return;
         }
         this.logger.warn(
-          `Provider ${provider} exhausted; no further configured provider in LLM_PROVIDER_ORDER — failing without failover`,
+          `Provider ${provider} exhausted; Gemini is the only generation provider — failing without failover`,
         );
       }
 
@@ -425,24 +420,7 @@ export class ChatGenerateProcessor extends WorkerHost {
     }
   }
 
-  /** BullMQ attempt N → Redis-ranked model index N-1 for the job's provider (order-resolved; next provider only on failover jobs). */
-  private async resolveModel(
-    provider: ChatProvider,
-    attemptsMade: number,
-  ): Promise<string> {
-    const rank =
-      provider === 'openai'
-        ? await this.modelRank.getOpenAiRank()
-        : await this.modelRank.getGeminiRank();
-    const idx = Math.min(Math.max(attemptsMade - 1, 0), Math.max(rank.length - 1, 0));
-    const picked = rank[idx];
-    if (picked) return picked;
-    return provider === 'openai'
-      ? this.openai.getModelName()
-      : this.gemini.getModelName();
-  }
-
-  /** Next provider in LLM_PROVIDER_ORDER after the failed one, if any. */
+  /** Next provider after the failed one, if any. Generation is Gemini only. */
   private nextProviderAfter(provider: ChatProvider): ChatProvider | undefined {
     const idx = this.providerOrder.indexOf(provider);
     return idx >= 0 ? this.providerOrder[idx + 1] : undefined;

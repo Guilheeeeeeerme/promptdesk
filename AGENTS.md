@@ -21,7 +21,7 @@ Coding-agent rules for this repository.
 | **Dual DBs** | Core (`prisma/`) and chat (`prisma-chat/`) stay separate — never merge schemas, clients, or Postgres roles. |
 | **SSO** | Keep `SSO_RETURN_ORIGINS` allow-listing; no open redirects in MFE hash-token handoff. |
 | **LLM / prompts** | Prompts in `apps/chat-worker/prompts/registry.yml` only. Never put untrusted guidelines/chat history in system instructions. Fail closed. Do not log message or guideline content. |
-| **Provider policy** | Gemini-first with ranked failover; respect `LLM_PROVIDER_ORDER`. JEV Choice for guideline validation (`JEV_GUIDELINE_MODE`, `apps/chat-worker/src/jev.service.ts`). See [docs/guardrails.md](./docs/guardrails.md). |
+| **Provider policy** | Gemini generates chat replies. JEV Choice validates guidelines (`JEV_GUIDELINE_MODE`, `apps/chat-worker/src/jev.service.ts`). See [docs/guardrails.md](./docs/guardrails.md). |
 | **Env** | `.env.example` → `.env`; never commit secrets. Prod requires real provider keys. |
 | **Guardrails reference** | This repo is the OWASP-aligned LLM guardrails reference for Argus and Quizzeira. Do not weaken contracts without an explicit task. |
 

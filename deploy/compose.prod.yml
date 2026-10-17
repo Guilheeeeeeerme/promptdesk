@@ -111,11 +111,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-log}
       NODE_ENV: production
       # LLM surface (keys live here; chat-worker consumes the same names)
-      LLM_USE_HEADROOM: ${LLM_USE_HEADROOM:-true}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
-      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-http://headroom:8787}
-      LLM_PROVIDER_ORDER: ${LLM_PROVIDER_ORDER:-gemini}
+      GEMINI_BASE_URL: https://generativelanguage.googleapis.com
     depends_on:
       # Profiled one-shot; required:false keeps default deploys unblocked.
       migrate:
@@ -168,15 +166,11 @@ services:
       NODE_ENV: production
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-lite}
-      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-http://headroom:8787}
-      LLM_USE_HEADROOM: ${LLM_USE_HEADROOM:-true}
-      LLM_PROVIDER_ORDER: ${LLM_PROVIDER_ORDER:-gemini}
-      MODEL_RANK_REFRESH_MS: ${MODEL_RANK_REFRESH_MS:-43200000}
-      MODEL_RANK_TOP_N: ${MODEL_RANK_TOP_N:-3}
+      GEMINI_BASE_URL: https://generativelanguage.googleapis.com
       LLM_RATE_LIMIT_PER_MINUTE: ${LLM_RATE_LIMIT_PER_MINUTE:-20}
       LLM_DAILY_BUDGET: ${LLM_DAILY_BUDGET:-500}
       CHAT_JOB_ATTEMPTS: ${CHAT_JOB_ATTEMPTS:-3}
-      # Panel PROMPTDESK_JEV_API_KEY is rendered as JEV_API_KEY
+      # Panel name is JEV_API_KEY (one key per stack).
       JEV_API_KEY: ${JEV_API_KEY:-}
       JEV_BASE_URL: ${JEV_BASE_URL:-https://api.typesafe.ai}
       JEV_MODEL: ${JEV_MODEL:-jev-1.13.0}

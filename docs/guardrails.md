@@ -34,38 +34,17 @@ reference promptdesk; each project maps them to its equivalent locations.
 
 ## 2. Provider layer contract
 
-- Gemini-first product policy: OpenAI is an optional cross-provider fallback
-  (`src/provider-policy.ts`, `src/chat.processor.ts`).
-- `LLM_PROVIDER_ORDER` (comma-separated, e.g. `openai,gemini`) is honored by
-  both call sites. Semantics (`resolveProviderOrder` in
-  `src/provider-policy.ts`):
-  - unset/empty or unknown-names-only falls back to the default
-    `gemini,openai`, which keeps current behavior exactly;
-  - unknown provider names are ignored;
-  - a provider whose API key is not configured is skipped.
-- Chat dispatch: fresh jobs start at the head of the resolved order; the
-  failed-attempt failover block re-enqueues with the next provider in order
-  (`src/chat.processor.ts`, `nextProviderAfter` / `failoverToProvider`).
-- Model-per-attempt: BullMQ attempt N maps to Redis-ranked model index N-1
-  for that provider (`resolveModel`), so retries move up the cheapest models.
-- Cross-provider failover happens only after ALL attempts on the current
-  provider fail. The last provider in order fails closed (no silent success,
-  no unbounded retry loops).
-- A provider without a key is skipped at order resolution; with the default
-  order and no `OPENAI_API_KEY`, behavior is identical to the old
-  gemini-only path.
+- Chat replies use the pinned Gemini model (`GEMINI_MODEL`, default
+  `gemini-2.5-flash-lite`). That is the cost/quality pin for this task.
+- Guideline validation uses JEV when `JEV_GUIDELINE_MODE=active` and a
+  `JEV_API_KEY` is set. Otherwise it calls the same pinned Gemini model once.
+- There is no model ladder and no provider-order failover.
 
-## 3. Cheapest-model rank contract
+## 3. Pinned model
 
-- `src/model-rank.service.ts` builds a per-provider cheapest model list:
-  seeds (`SEED_*_INPUT_USD` in `src/model-rank.constants.ts`) + live
-  models.list + pricing enrichment, cached in Redis
-  (`models:rank:{provider}`, `models:rank:updatedAt`).
-- `MODEL_RANK_TOP_N=3`: only the three cheapest models are ever used.
-- `MODEL_RANK_REFRESH_MS` defaults to 43200000 (12h = twice daily); a failed
-  refresh keeps the last good rank, and hardcoded verified defaults
-  (`DEFAULT_GEMINI_RANK`, `DEFAULT_OPENAI_RANK`) are used when Redis is empty
-  and refresh fails.
+- `GEMINI_MODEL` is the only generation model. Retries repeat that model.
+- `JEV_MODEL` (default `jev-1.13.0`) is the only JEV model.
+- `JEV_BASE_URL` is `https://api.typesafe.ai` on every stack.
 
 ## 4. Rate limiting contract
 
@@ -83,9 +62,6 @@ reference promptdesk; each project maps them to its equivalent locations.
 
 ## 5. Background LLM schedule contract
 
-- Periodic maintenance LLM tasks run on long windows:
-  `ModelRankService` refreshes twice daily (`MODEL_RANK_REFRESH_MS`) via an
-  unref'd `setInterval`, plus one refresh on startup; failures only warn.
 - Event-driven interactive tasks (chat reply, guideline validation) remain
   request-driven queues but are bounded by the rate limits and job-attempt
   caps above; never a poll loop, never unbounded concurrency.
@@ -94,13 +70,14 @@ reference promptdesk; each project maps them to its equivalent locations.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | (required) | Primary provider key |
-| `GEMINI_MODEL` | `gemini-2.5-flash-lite` | Default/override Gemini model |
-| `OPENAI_API_KEY` | (optional) | Fallback provider key |
-| `OPENAI_MODEL` | `gpt-5-nano` | Default/override OpenAI model |
-| `LLM_PROVIDER_ORDER` | `gemini,openai` | Provider order; unknown ignored, keyless skipped |
-| `MODEL_RANK_REFRESH_MS` | `43200000` | Rank refresh window (twice daily) |
-| `MODEL_RANK_TOP_N` | `3` | Cheapest models actually used |
+| `GEMINI_API_KEY` | (required) | Gemini key |
+| `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com` | Gemini API root |
+| `GEMINI_MODEL` | `gemini-2.5-flash-lite` | Pinned chat model |
+| `JEV_API_KEY` | (required for active JEV) | JEV key, unique per stack |
+| `JEV_BASE_URL` | `https://api.typesafe.ai` | JEV API root |
+| `JEV_MODEL` | `jev-1.13.0` | Pinned JEV model |
+| `JEV_TIMEOUT_SECONDS` | `10` | JEV request timeout |
+| `JEV_GUIDELINE_MODE` | empty | `off` / `shadow` / `active` |
 | `LLM_RATE_LIMIT_PER_MINUTE` | strict | Worker per-entity minute budget |
 | `LLM_DAILY_BUDGET` | strict | Worker per-entity daily budget |
 | (per project, e.g. `CHAT_RATE_LIMIT_PER_MINUTE`) | strict | HTTP endpoint send caps |
@@ -114,7 +91,7 @@ See `.env.example` for the full annotated set.
 | LLM01 Prompt Injection | Fenced untrusted context (`buildSupportPrompt`); guideline create/upload quarantine + validator; Gemini validation uses separated systemInstruction |
 | LLM02 Sensitive Information Disclosure | No secrets in prompts; no content logs; **Redis `chat:events` carries reply text** — treat Redis as sensitive; Socket.IO room auth is the client control |
 | LLM03 Excessive Agency | Text-only LLM; no tools; job ownership checked before generation |
-| LLM04 Supply Chain | Versioned registry; allowlisted model IDs in rank (no scrape-promoted unknowns) |
+| LLM04 Supply Chain | Versioned registry; pinned `GEMINI_MODEL` and `JEV_MODEL` |
 | LLM05 Data and Model Poisoning | Deterministic pre-LLM guideline screening; create-path no longer activates unvalidated guidelines |
 | LLM06 Unbounded Consumption | HTTP send/upload caps + worker Redis `LLM_RATE_LIMIT_PER_MINUTE` / `LLM_DAILY_BUDGET` fail-closed before provider calls |
 | LLM07 Misinformation | Prompt policy only; guidelines sticky-snapshotted per conversation |

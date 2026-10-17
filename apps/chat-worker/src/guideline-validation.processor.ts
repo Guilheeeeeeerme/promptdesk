@@ -1,23 +1,19 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
-import { ConfigService } from "@nestjs/config";
 import { Job } from "bullmq";
 import { CorePrismaService } from "./core-prisma.service";
 import { GeminiService } from "./gemini.service";
-import { OpenAiService } from "./openai.service";
 import { GuidelineValidator } from "./guideline-validator";
 import {
   GUIDELINE_VALIDATE_QUEUE,
   type GuidelineValidateJobData,
 } from "./chat.constants";
 import { EventsPublisher } from "./events.publisher";
-import { ModelRankService } from './model-rank.service';
 import {
   executeGuidelineValidation,
   type GuidelineLifecycleStore,
 } from "./guideline-validation.lifecycle";
 import {
-  createGeminiFirstGuidelineProvider,
-  resolveProviderOrder,
+  createGeminiGuidelineProvider,
   type GuidelineModelProvider,
 } from './provider-policy';
 import { LlmBudgetService } from './llm-budget';
@@ -34,10 +30,7 @@ export class GuidelineValidationProcessor extends WorkerHost {
   constructor(
     private readonly prisma: CorePrismaService,
     private readonly gemini: GeminiService,
-    private readonly openai: OpenAiService,
-    private readonly modelRank: ModelRankService,
     private readonly events: EventsPublisher,
-    private readonly config: ConfigService,
     private readonly llmBudget: LlmBudgetService,
     private readonly jev: JevService,
   ) {
@@ -48,7 +41,7 @@ export class GuidelineValidationProcessor extends WorkerHost {
     const companyId = job.data.companyId;
     const mode = this.jev.guidelineMode;
 
-    const llmProvider = await this.buildLlmProvider(companyId);
+    const llmProvider = this.buildLlmProvider(companyId);
 
     const validator = new GuidelineValidator(
       mode === 'active' && this.jev.isConfigured()
@@ -78,22 +71,10 @@ export class GuidelineValidationProcessor extends WorkerHost {
     );
   }
 
-  private async buildLlmProvider(companyId: string): Promise<GuidelineModelProvider> {
-    const [geminiModels, openaiModels] = await Promise.all([
-      this.modelRank.getGeminiRank(),
-      this.modelRank.getOpenAiRank(),
-    ]);
-    const providerOrder = resolveProviderOrder(
-      this.config.get<string>('LLM_PROVIDER_ORDER'),
-      { gemini: true, openai: this.openai.isConfigured() },
-    );
-    return createGeminiFirstGuidelineProvider(
+  private buildLlmProvider(companyId: string): GuidelineModelProvider {
+    return createGeminiGuidelineProvider(
       this.withBudget(companyId, this.gemini),
-      geminiModels,
-      this.withBudget(companyId, this.openai),
-      openaiModels,
-      this.openai.isConfigured(),
-      providerOrder,
+      this.gemini.getModelName(),
     );
   }
 

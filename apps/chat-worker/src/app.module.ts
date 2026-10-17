@@ -12,7 +12,6 @@ import { EventsPublisher } from "./events.publisher";
 import { GeminiService } from "./gemini.service";
 import { HealthController } from "./health.controller";
 import { LlmBudgetService } from "./llm-budget";
-import { ModelRankService } from "./model-rank.service";
 import { OpenAiService } from "./openai.service";
 import { PrismaService } from "./prisma.service";
 import { JevService } from "./jev.service";
@@ -42,7 +41,6 @@ import { JevService } from "./jev.service";
     GeminiService,
     OpenAiService,
     JevService,
-    ModelRankService,
     LlmBudgetService,
     EventsPublisher,
     ChatGenerateProcessor,

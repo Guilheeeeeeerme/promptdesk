@@ -83,6 +83,6 @@ Seeds: `seed` / `seed:platform` / `seed:demo` under `apps/api`.
 
 - Dual Prisma schemas: `apps/api/prisma/schema.prisma` and `apps/api/prisma-chat/schema.prisma` — keep DBs/roles separate.
 - SSO return origins allow-listed via `SSO_RETURN_ORIGINS` (open-redirect safe).
-- Model ladder: Redis-ranked (`MODEL_RANK_*`); honor `LLM_PROVIDER_ORDER`.
+- Chat generation is Gemini. Guideline checks are JEV when `JEV_GUIDELINE_MODE=active`.
 - Guardrails: deterministic screening before LLM; untrusted data only in fenced user-message context; never into system instructions; never log message/guideline bodies.
-- Local Headroom: set provider base URLs from `.env.example`. Prod chat needs a real `GEMINI_API_KEY`.
+- Gemini is called directly. Set provider base URLs from `.env.example`. Prod chat needs a real `GEMINI_API_KEY`.

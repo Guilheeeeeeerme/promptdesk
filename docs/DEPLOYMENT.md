@@ -12,7 +12,7 @@ in the private **infra** repo; this page explains what happens when you push.
 | GHCR | `ghcr.io/guilheeeeeeerme/promptdesk/{api,chatworker,app,support}:<appSha>.<infraSha>` |
 | VPS — Compose project `promptdesk` | `api` (NestJS, loopback `13000`), `chatworker` (BullMQ), `app` (web SPA, `18080`), `support` (MFE, `18081`) |
 | VPS — shared `infra_data` | `postgres-promptdesk` (role `promptdesk`, DB `promptdesk`, schema `promptdesk`) and `postgres-promptdesk-chat` (role `promptdesk_chat`, DB `promptdesk_chat`, schema `promptdesk_chat`) — two containers, roles kept distinct; Redis DB `/0` |
-| VPS — `infra_llm` | Headroom proxy for `chatworker` (`GEMINI_BASE_URL=http://headroom:8787`) |
+| VPS — Gemini | Public Gemini API (`GEMINI_BASE_URL=https://generativelanguage.googleapis.com`) |
 | VPS — nginx + Let's Encrypt | `api|app|support.promptdesk.ferredemo.dev` → loopback ports |
 | Hostinger DNS | A records → VPS |
 

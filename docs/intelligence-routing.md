@@ -21,5 +21,5 @@ Guardrails: [guardrails.md](./guardrails.md).
 
 Unset → `active` when `JEV_API_KEY` present, else `off`. Never leave production on `shadow`.
 
-Panel secret: `PROMPTDESK_JEV_API_KEY` → `JEV_API_KEY` (never reuse Quizzeira/Argus keys).
-JEV hits `JEV_BASE_URL` direct — never Headroom.
+Panel secret: `JEV_API_KEY` (never reuse the Quizzeira or Argus key).
+JEV hits `JEV_BASE_URL` direct. Gemini hits the public API.
