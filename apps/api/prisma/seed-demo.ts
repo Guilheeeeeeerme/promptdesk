@@ -4,14 +4,14 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-export const DEMO_COMPANY_NAME = 'Acme Demo Co';
-export const DEMO_EMAIL = 'demo@acme-demo.local';
-export const DEMO_AGENT_EMAIL = 'agent@acme-demo.local';
+export const DEMO_COMPANY_NAME = 'PromptDesk Demo Co';
+export const DEMO_EMAIL = 'demo@promptdesk.ferredemo.dev';
+export const DEMO_AGENT_EMAIL = 'agent@promptdesk.ferredemo.dev';
 
 const DEFAULT_DEMO_PASSWORD = 'Password123!';
 
 const DEMO_GUIDELINE = [
-  'Acme Demo Co — Support Guidelines',
+  'PromptDesk Demo Co — Support Guidelines',
   '',
   '- Refunds: available within 14 days of purchase; resolve instantly via dashboard.',
   '- Shipping: orders ship in 1-2 business days; free over $50.',

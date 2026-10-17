@@ -47,7 +47,7 @@ export class AuthService {
 
   private async ensureDemoWorld() {
     const guideline = [
-      'Acme Demo Co — Support Guidelines',
+      'PromptDesk Demo Co — Support Guidelines',
       '',
       '- Refunds: available within 14 days of purchase; resolve instantly via dashboard.',
       '- Shipping: orders ship in 1-2 business days; free over $50.',
@@ -56,13 +56,14 @@ export class AuthService {
     ].join('\n');
 
     const company = await this.prisma.company.upsert({
-      where: { name: 'Acme Demo Co' },
+      where: { name: 'PromptDesk Demo Co' },
       update: {},
-      create: { name: 'Acme Demo Co' },
+      create: { name: 'PromptDesk Demo Co' },
     });
 
+    const demoEmail = 'demo@promptdesk.ferredemo.dev';
     let user = await this.prisma.user.findUnique({
-      where: { email: 'demo@acme-demo.local' },
+      where: { email: demoEmail },
       include: { company: true },
     });
     if (user && user.role !== Role.manager) {
@@ -76,8 +77,9 @@ export class AuthService {
       await this.prisma.user
         .create({
           data: {
-            email: 'demo@acme-demo.local',
-            name: 'Demo Manager',
+            email: demoEmail,
+            name: 'Demo User',
+            // Unusable hash — demo entry is button-only (no password login).
             passwordHash: await bcrypt.hash(randomUUID(), 12),
             role: Role.manager,
             companyId: company.id,
@@ -93,12 +95,19 @@ export class AuthService {
           return null;
         });
       user = await this.prisma.user.findUnique({
-        where: { email: 'demo@acme-demo.local' },
+        where: { email: demoEmail },
         include: { company: true },
       });
     }
     if (!user) {
       throw new Error('demo user unavailable');
+    }
+    if (user.companyId !== company.id) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { companyId: company.id },
+        include: { company: true },
+      });
     }
 
     await this.expireDemoGuests(company.id, user.id);
@@ -146,8 +155,13 @@ export class AuthService {
     const horizon = new Date(
       now.getTime() + this.DEMO_GUEST_TTL_HOURS * 3_600_000,
     );
+    // Never lifecycle-expire platform operators (root/admin) that share the demo tenant.
     const guests = await this.prisma.user.findMany({
-      where: { companyId, id: { not: demoUserId } },
+      where: {
+        companyId,
+        id: { not: demoUserId },
+        role: { notIn: [Role.root, Role.admin] },
+      },
       select: { id: true, expiresAt: true },
     });
     if (guests.length === 0) {
@@ -202,7 +216,7 @@ export class AuthService {
           conversationId: conversation.id,
           role: 'assistant',
           content:
-            "Welcome! I answer questions grounded in Acme Demo Co's support guidelines stored in this workspace. The message above is a sample question — open a new thread and ask anything to see a grounded AI answer.",
+            "Welcome! I answer questions grounded in PromptDesk Demo Co's support guidelines stored in this workspace. The message above is a sample question — open a new thread and ask anything to see a grounded AI answer.",
         },
       ],
     });
