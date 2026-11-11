@@ -1,61 +1,67 @@
 # PromptDesk — deployment
 
-PromptDesk is **Hostinger-only**: everything runs on the VPS `82.25.74.147`
-(`ferredemo.dev`). No Supabase, no Cloudflare. The build/deploy machinery lives
-in the private **infra** repo; this page explains what happens when you push.
+PromptDesk owns its application deployment workflows. The NestJS API and BullMQ
+chat-worker run in the existing Hostinger VPS Dokploy stack. The admin and support
+SPAs run on Cloudflare Pages. Infra owns host operations, not an additional
+PromptDesk release pipeline. PromptDesk does not use Supabase.
 
 ## What runs where
 
 | Place | What |
 | --- | --- |
-| GitHub Actions (`infra` repo) | `Deploy app` / `Migrate app` workflows |
-| GHCR | `ghcr.io/guilheeeeeeerme/promptdesk/{api,chatworker,app,support}:<appSha>.<infraSha>` |
-| VPS — Compose project `promptdesk` | `api` (NestJS, loopback `13000`), `chatworker` (BullMQ), `app` (web SPA, `18080`), `support` (MFE, `18081`) |
-| VPS — shared `infra_data` | `postgres-promptdesk` (role `promptdesk`, DB `promptdesk`, schema `promptdesk`) and `postgres-promptdesk-chat` (role `promptdesk_chat`, DB `promptdesk_chat`, schema `promptdesk_chat`) — two containers, roles kept distinct; Redis DB `/0` |
-| VPS — Gemini | Public Gemini API (`GEMINI_BASE_URL=https://generativelanguage.googleapis.com`) |
-| VPS — nginx + Let's Encrypt | `api|app|support.promptdesk.ferredemo.dev` → loopback ports |
-| Hostinger DNS | A records → VPS |
+| `.github/workflows/deploy.yml` | Backend tests, GHCR builds, Compose smoke, Dokploy webhook, release confirmation |
+| GHCR | `ghcr.io/guilheeeeeeerme/promptdesk/{api,chatworker}:<sha>` and moving `:production` tags |
+| VPS Dokploy stack | API, worker, Postgres 16 and Redis; `deploy/compose.prod.yml` |
+| Postgres | Separate core/chat databases and roles, `promptdesk` and `promptdesk_chat` |
+| `.github/workflows/pages.yml` | Builds and publishes `apps/web` and `apps/support` to production branch `main` |
+| Cloudflare Pages | Projects `promptdesk-app` and `promptdesk-support`, serving app/support custom domains |
+| Public API | `https://api.promptdesk.ferredemo.dev`, routed by the VPS edge |
 
-Secrets: `/opt/infra/secrets/promptdesk.env` on the VPS, sourced from `infra/secrets/production.enc.yaml` (SOPS).
+Runtime secrets belong in the existing Dokploy stack environment. See
+[`deploy/env.production.example`](../deploy/env.production.example) for names;
+never commit real values. Frontend workflow secrets are `CLOUDFLARE_API_TOKEN`
+(Pages project deployment permission) and `CLOUDFLARE_ACCOUNT_ID`.
 
-## Step by step: push → production
+## Push to production
 
-1. Push to `main`. `.github/workflows/deploy-infra.yml` sends `repository_dispatch`
-   (`project=promptdesk`, this repo, the commit SHA) to `infra` using secret `INFRA_DISPATCH_TOKEN`.
-2. `infra` → **Deploy app**:
-   1. `resolve`: SHA must be the current head of `main` (older pushes are skipped).
-   2. `build` (GitHub runner): `scripts/app_test.sh promptdesk` runs `npm ci`,
-      `prisma:generate`, `npm test` in `apps/api`; `purge_gate.sh` rejects any Supabase
-      reference; `build.sh` builds the shared deps base, `api`, `chatworker`, `app`
-      (`apps/web`) and `support` from `infra/containers/promptdesk/*` and pushes to GHCR.
-   3. `deploy` (VPS over SSH): `deploy.sh promptdesk <release> deploy` — pulls the images,
-      **checks `prisma migrate status` for both schemas (fails closed if pending)**,
-      `docker compose up -d --wait`, smoke (`/auth/me` → 401, app `/health`), promotes
-      the release. Failure restores the previous release automatically.
-3. Nothing else restarts: Argus and Quizzeira are separate Compose projects.
+Push to `main` starts two independent workflows:
 
-Manual trigger: `infra` → Actions → **Deploy app** → `project=promptdesk`, optional `sha`.
+1. **Deploy** tests API and worker, builds both runtime images, and starts a
+   disposable Compose stack on the runner. Smoke exercises migrations for both
+   schemas and verifies the API `/version` response.
+2. After smoke succeeds, Deploy calls the existing `DOKPLOY_DEPLOY_HOOK_URL` and
+   polls public `/version` for the expected SHA and `promptdesk-api` identity.
+   Requests bypass caches and have their own timeout; overall confirmation is
+   bounded. A timeout fails the workflow; it does not prove deployment stopped
+   or rolled back. Inspect Dokploy and compare `/version` before retrying.
+3. **Pages** checks credential presence before installing dependencies, builds both
+   SPAs with production API/SSO origins, and publishes with `--branch=main`.
+   Each Pages project's configured production branch must also be `main`.
 
-## Step by step: schema change (Prisma, dual schemas)
+API `/version` is the public release identity probe. The API has no `/health`
+route; use `/auth/me` returning 401 to check the unauthenticated auth boundary.
+The worker's `/health` reports process liveness only. None of these probes proves
+provider availability or a complete chat round trip.
 
-1. Add the migration under `apps/api/prisma/migrations` or `apps/api/prisma-chat/migrations` and push.
-2. In `infra`, run **Deploy app** with `migrate=true` (or **Migrate app** then **Deploy app**).
-   On the VPS this runs `docker compose run --rm api npx prisma migrate deploy` for
-   `prisma/schema.prisma` and `prisma-chat/schema.prisma`, then `npm run seed:platform`.
-   `seed_demo=true` adds `seed:demo`.
-3. A plain deploy never migrates; the API image never migrates on start.
+## Migrations and rollback
 
-## Rollback
+Core and chat schemas, clients and roles remain separate. CI migrations use
+throwaway runner databases; they do not migrate production. Production migrations
+are an explicit operation using the existing Dokploy stack's one-shot migration
+service. Review and back up both databases first. Follow
+[`deploy/README.md`](../deploy/README.md) for the stack procedure.
 
-`infra` → **Deploy app** with the previous `sha`, or on the VPS:
-`bash /opt/infra/repository/scripts/deploy.sh promptdesk <previous release> rollback`.
+The Deploy workflow's `sha` input selects the source revision to check out and
+build. For rollback, select a previously verified commit and check production
+migration compatibility. `skip_migrations` exercises rollback migration skipping
+in CI only; it does not set the VPS environment.
 
 ## Local
 
 ```bash
 cp .env.example .env.local.docker && cp .env.local.docker .env
-docker compose up --build   # or scripts/up.sh
+docker compose up --build
 ```
 
-Local Postgres pair is the Compose containers; there is no remote-DB mode.
-Full infra view: `infra/docs/DEPLOYMENT.md`.
+Local Compose runs its own Postgres pair and Redis. It is not a production
+deployment path. Provider requests need valid local credentials.

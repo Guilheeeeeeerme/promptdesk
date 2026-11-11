@@ -11,7 +11,7 @@ Coding-agent rules for this repository.
 ## Scope
 
 - Work inside `apps/` and `docs/` in this repo.
-- Production Compose and GitHub Actions workflows live in **infra** — GHA + GHCR is the sole supported production control plane (do not use Jenkins; VPS Jenkins removal is CONFIRM-gated in infra after GHA is proven). Do not invent a parallel prod deploy path here.
+- Production backend Compose and GitHub Actions live here: `.github/workflows/deploy.yml` builds GHCR images and triggers the existing Dokploy stack from `deploy/compose.prod.yml`. Frontends publish to Cloudflare Pages through `.github/workflows/pages.yml`. Infra owns the VPS and shared host operations; do not introduce a second application deploy path.
 - Prefer the smallest sufficient change. Avoid broad refactors and full-matrix test runs unless asked.
 
 ## Hard rules

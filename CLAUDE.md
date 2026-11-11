@@ -1,6 +1,6 @@
 # CLAUDE.md — PromptDesk
 
-Multi-tenant AI customer-support platform: admin SSO host, support-chat micro-frontend, and LLM orchestration with cost-ranked model failover.
+Multi-tenant AI customer-support platform: admin SSO host, support-chat micro-frontend, Gemini chat generation, and JEV guideline decisions.
 
 Agent behavioral rules: see [AGENTS.md](./AGENTS.md). LLM policy reference (also used by Argus/Quizzeira): [docs/guardrails.md](./docs/guardrails.md).
 
@@ -12,7 +12,7 @@ Agent behavioral rules: see [AGENTS.md](./AGENTS.md). LLM policy reference (also
 | Support | https://support.promptdesk.ferredemo.dev |
 | API | https://api.promptdesk.ferredemo.dev |
 
-Production deploys are owned by the **infra** repo (GitHub Actions `Deploy app` → GHCR → VPS). Prod dual Postgres = VPS containers `postgres-promptdesk` / `postgres-promptdesk-chat` (roles `promptdesk` / `promptdesk_chat`, keep distinct); local Compose uses its own Docker Postgres pair. PromptDesk never uses Supabase. Step-by-step: [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
+Production backend deploys use this repo's `Deploy` workflow → GHCR → existing Dokploy Compose stack. The production Postgres container holds separate core/chat databases and roles (`promptdesk` / `promptdesk_chat`); keep them distinct. Frontends use Cloudflare Pages through this repo's `Pages` workflow. Infra owns VPS operations. Local Compose uses its own Docker Postgres pair. PromptDesk never uses Supabase. Step-by-step: [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
 
 ## Layout
 
@@ -21,7 +21,7 @@ Multi-app repo (no root `package.json` — each app has its own lockfile):
 | Path | Role |
 | --- | --- |
 | `apps/api` | NestJS API, dual Prisma, Socket.IO, BullMQ producers |
-| `apps/chat-worker` | BullMQ consumer → Gemini / OpenAI model ladder |
+| `apps/chat-worker` | BullMQ consumer → Gemini generation + JEV guideline decisions |
 | `apps/web` | Vite admin + SSO host |
 | `apps/support` | Vite support-chat MFE |
 | `apps/shared/auth` | Shared auth helpers |
@@ -44,7 +44,7 @@ web (SSO) / support MFE
 ## Stack
 
 - NestJS, Prisma, Socket.IO, BullMQ, React/Vite, Node 22 in CI
-- Dual Postgres + Redis; Gemini primary, OpenAI failover
+- Separate core/chat Postgres databases + Redis; Gemini-only generation, JEV guideline decisions
 - Prompts live in `apps/chat-worker/prompts/registry.yml` (not inline in code)
 
 ## Local
@@ -56,7 +56,7 @@ docker compose up --build
 # or: scripts/up.sh
 ```
 
-**DB:** local = Compose pair (`.env.local.docker`); prod = VPS containers (infra repo). No remote tunnel. Typical ports: web `:8080`, support `:8081`, API `:3000`. Prod Redis uses DB `/0`.
+**DB:** local = Compose pair (`.env.local.docker`); prod = existing Dokploy Postgres container with separate databases/roles. No remote tunnel. Typical ports: web `:8080`, support `:8081`, API `:3000`. Prod Redis uses DB `/0`.
 
 ## Commands
 
@@ -75,7 +75,7 @@ npm test
 # oxlint via each app's package scripts
 ```
 
-CI pre-deploy (via infra): `npm ci && npm run prisma:generate && npm test -- --passWithNoTests` in `apps/api`.
+CI pre-deploy (`.github/workflows/deploy.yml`): install and run tests for API and worker, then build both images and smoke-test dual-schema migrations and `/version` before the Dokploy webhook.
 
 Seeds: `seed` / `seed:platform` / `seed:demo` under `apps/api`.
 

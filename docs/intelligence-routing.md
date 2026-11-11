@@ -5,7 +5,7 @@ Guardrails: [guardrails.md](./guardrails.md).
 
 | Need | Owner |
 | --- | --- |
-| Support chat reply (free text) | **Gemini** (cheapest Flash-Lite ladder; optional OpenAI last-resort) |
+| Support chat reply (free text) | **Gemini only**, pinned by `GEMINI_MODEL`; no model ladder or OpenAI failover |
 | Guideline validation (closed `valid` / `invalid` / `malicious`) | **JEV Choice** when `JEV_GUIDELINE_MODE=active` |
 | Deterministic pre-screen / output policy | Code (no LLM) |
 

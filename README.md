@@ -4,7 +4,7 @@
 
 # PromptDesk
 
-Multi-tenant AI customer-support platform: admin SSO host, support-chat micro-frontend, and LLM orchestration with cost-ranked model failover.
+Multi-tenant AI customer-support platform: admin SSO host, support-chat micro-frontend, Gemini chat generation, and JEV guideline decisions.
 
 ## Live
 
@@ -22,9 +22,9 @@ Multi-tenant AI customer-support platform: admin SSO host, support-chat micro-fr
 
 | Capability | Status |
 | --- | --- |
-| Gemini→OpenAI ladder, BullMQ chat-worker, fenced untrusted context, guideline quarantine | **VERIFIED** |
+| Gemini-only generation, BullMQ chat-worker, fenced untrusted context, guideline quarantine | **IMPLEMENTED** |
 | Socket.IO job/status fan-out (not token streaming) | **VERIFIED** |
-| Rank refresh 12h; budgets 20/min · 500/day canonical; session 86400s; attempts=3; timeout 30s; upload limit 10 | **VERIFIED** |
+| Budgets 20/min · 500/day canonical; session 86400s; attempts=3; timeout 30s; upload limit 10 | **IMPLEMENTED** |
 | Token streaming / token telemetry | **NOT FOUND** |
 | `customer_draft` | **UNUSED** |
 | Redis `chat:events` carries reply text (LLM02) | **PARTIAL** |
@@ -59,8 +59,8 @@ docker compose up --build
 
 - Agent map: [`CLAUDE.md`](CLAUDE.md) · [`AGENTS.md`](AGENTS.md)
 - Observability notes: [`docs/observability.md`](docs/observability.md)
-- Production deploy: private **infra** repo (GitHub Actions → GHCR → VPS; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+- Production deploy: this repo's GitHub Actions → GHCR → Dokploy for the backend; Cloudflare Pages for the frontends (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
 ## Deployment
 
-Push to `main` → infra GitHub Actions builds to GHCR and deploys. Details: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Push to `main` → backend `Deploy` and frontend `Pages` workflows. Details: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

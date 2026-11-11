@@ -27,6 +27,15 @@ jobs:
       VITE_SUPPORT_ORIGIN: https://support.promptdesk.ferredemo.dev
       VITE_SSO_RETURN_ORIGINS: https://support.promptdesk.ferredemo.dev
     steps:
+      - name: Check Pages deployment credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo '::error::Configure repository Actions secrets CLOUDFLARE_API_TOKEN (Pages deployment permission) and CLOUDFLARE_ACCOUNT_ID before publishing PromptDesk.'
+            exit 1
+          fi
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -42,7 +51,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@^4 pages deploy apps/web/dist --project-name=promptdesk-app
+        run: npx --yes wrangler@^4 pages deploy apps/web/dist --project-name=promptdesk-app --branch=main
 
   support:
     name: deploy promptdesk-support (apps/support)
@@ -50,6 +59,15 @@ jobs:
     env:
       VITE_MAIN_ORIGIN: https://app.promptdesk.ferredemo.dev
     steps:
+      - name: Check Pages deployment credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo '::error::Configure repository Actions secrets CLOUDFLARE_API_TOKEN (Pages deployment permission) and CLOUDFLARE_ACCOUNT_ID before publishing PromptDesk.'
+            exit 1
+          fi
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -65,4 +83,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@^4 pages deploy apps/support/dist --project-name=promptdesk-support
+        run: npx --yes wrangler@^4 pages deploy apps/support/dist --project-name=promptdesk-support --branch=main
