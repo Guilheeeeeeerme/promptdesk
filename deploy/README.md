@@ -36,8 +36,8 @@ cannot block on migrations, and rollbacks keep them off entirely.
    (e.g. `openssl rand -hex 24`). Required non-default keys: `POSTGRES_PASSWORD`,
    `POSTGRES_PROMPTDESK_PASSWORD`, `POSTGRES_PROMPTDESK_CHAT_PASSWORD`,
    `REDIS_PASSWORD`, `DATABASE_URL`, `CHAT_DATABASE_URL`, `GEMINI_API_KEY`
-. Set `GIT_SHA` when triggering a
-   manual run; CI normally injects it. Copy one of `deploy/tiers/*.env` into
+. Do not set `GIT_SHA` in the stack environment: CI bakes release identity
+   into each image. Copy one of `deploy/tiers/*.env` into
    the same env if you want to pin memory limits explicitly.
 3. **Deploy.** Dokploy runs `docker compose up -d`: postgres first boot runs
    `deploy/postgres/initdb/*` (roles + DBs), redis starts with the password,

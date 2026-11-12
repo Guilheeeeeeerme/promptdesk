@@ -83,7 +83,6 @@ services:
       CHAT_DATABASE_URL: ${CHAT_DATABASE_URL:?}
       CHAT_DATABASE_DIRECT_URL: ${CHAT_DATABASE_DIRECT_URL:-}
       SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-}
-      GIT_SHA: ${GIT_SHA:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,7 +107,6 @@ services:
       SSO_RETURN_ORIGINS: ${SSO_RETURN_ORIGINS:-https://support.promptdesk.ferredemo.dev}
       PORT: 3000
       CHAT_RATE_LIMIT_PER_MINUTE: ${CHAT_RATE_LIMIT_PER_MINUTE:-20}
-      GIT_SHA: ${GIT_SHA:-unknown}
       SERVICE_NAME: promptdesk-api
       LOG_LEVEL: ${LOG_LEVEL:-log}
       NODE_ENV: production
@@ -183,7 +181,6 @@ services:
       JEV_GUIDELINE_MODE: ${JEV_GUIDELINE_MODE:-}
       CHAT_WORKER_PORT: 3001
       SERVICE_NAME: promptdesk-chatworker
-      GIT_SHA: ${GIT_SHA:-unknown}
     depends_on:
       api:
         condition: service_healthy

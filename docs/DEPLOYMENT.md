@@ -17,6 +17,9 @@ PromptDesk release pipeline. PromptDesk does not use Supabase.
 | Cloudflare Pages | Projects `promptdesk-app` and `promptdesk-support`, serving app/support custom domains |
 | Public API | `https://api.promptdesk.ferredemo.dev`, routed by the VPS edge |
 
+CI bakes `GIT_SHA` into each runtime image. Do not override it in Compose or the
+Dokploy environment: `/version` must identify the running image, including rollbacks.
+
 Runtime secrets belong in the existing Dokploy stack environment. See
 [`deploy/env.production.example`](../deploy/env.production.example) for names;
 never commit real values. Frontend workflow secrets are `CLOUDFLARE_API_TOKEN`
